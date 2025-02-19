@@ -1,4 +1,4 @@
-import '../../courses/models/enrollment.dart';
+import '../../modules/models/enrollment.dart';
 import '../../quizzes/models/quiz_attempt.dart';
 import 'user.dart';
 

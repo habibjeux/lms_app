@@ -1,4 +1,4 @@
-import '../../courses/models/teaching.dart';
+import '../../modules/models/teaching.dart';
 import 'user.dart';
 
 class Teacher {

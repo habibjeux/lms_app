@@ -77,15 +77,13 @@ class AuthRepository {
 
   Future<void> logout() async {
     try {
-      if (await hasInternetConnection()) {
-        await _dio.post('/auth/logout');
-      }
-    } finally {
       await Future.wait([
         _storage.deleteToken(),
         _storage.deleteUser(),
       ]);
       _dio.options.headers.remove('Authorization');
+    } catch (e) {
+      throw AppException(message: 'Erreur lors de la déconnexion');
     }
   }
 

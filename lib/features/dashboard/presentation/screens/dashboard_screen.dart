@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../../courses/presentation/screens/courses_screen.dart';
+import 'package:lms_app/features/meeting/presentation/screens/meeting_screen.dart';
+import 'package:lms_app/features/modules/presentation/screens/modules_screen.dart';
+import '../../../settings/presentation/screens/settings_screen.dart';
 import '../widgets/student_drawer.dart';
 import 'home_screen.dart';
 
@@ -15,9 +17,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   final _pages = [
     const HomeScreen(),
-    const CoursesScreen(),
-    const CoursesScreen(),
-    const CoursesScreen(),
+    const ModulesScreen(),
+    const MeetingScreen(),
+    const SettingsScreen(),
   ];
 
   @override
@@ -41,17 +43,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
           NavigationDestination(
             icon: Icon(Icons.school_outlined),
             selectedIcon: Icon(Icons.school),
-            label: 'Cours',
+            label: 'Modules',
           ),
           NavigationDestination(
             icon: Icon(Icons.calendar_today_outlined),
-            selectedIcon: Icon(Icons.message),
-            label: 'Forums',
+            selectedIcon: Icon(Icons.calendar_today),
+            label: 'Réunions',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),
-            label: 'Profil',
+            label: 'Settings',
           ),
         ],
       ),

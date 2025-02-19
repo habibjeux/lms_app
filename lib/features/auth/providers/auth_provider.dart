@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import '../../../core/exceptions/app_exception.dart';
 import '../data/auth_repository.dart';
 import '../models/user.dart';
+import '../../../core/services/storage_service.dart';
 
 class AuthProvider with ChangeNotifier {
   final AuthRepository _authRepository = AuthRepository();
+  final StorageService _storage = StorageService();
 
   bool _isLoading = false;
   String? _error;
@@ -14,6 +16,26 @@ class AuthProvider with ChangeNotifier {
   String? get error => _error;
   User? get user => _user;
   bool get isAuthenticated => _user != null;
+
+  AuthProvider() {
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    _setLoading(true);
+    await _loadUserAndToken();
+    _setLoading(false);
+  }
+
+  Future<void> _loadUserAndToken() async {
+    final token = await _storage.getToken();
+    final userData = await _storage.getUser();
+
+    if (token != null && userData != null) {
+      _user = User.fromJson(userData);
+      _authRepository.initializeToken();
+    }
+  }
 
   Future<void> login(String email, String password) async {
     try {
@@ -33,6 +55,12 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  Future<void> logout() async {
+    _user = null;
+    await _authRepository.logout();
+    notifyListeners();
+  }
+
   void _setLoading(bool value) {
     _isLoading = value;
     notifyListeners();
@@ -46,11 +74,5 @@ class AuthProvider with ChangeNotifier {
   void _clearError() {
     _error = null;
     notifyListeners();
-  }
-
-  Future<void> logout() {
-    _user = null;
-    notifyListeners();
-    return _authRepository.logout();
   }
 }
