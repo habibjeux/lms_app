@@ -1,27 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:provider/provider.dart';
 import '../../../../core/services/sync_service.dart';
 import '../../../../core/utlils/file_helper.dart';
+import '../../../../core/providers/connectivity_provider.dart';
 import '../../models/activity.dart';
+import '../../models/assignment.dart';
 import '../../models/resource.dart';
 import '../../models/enums/resource_type.dart';
 import '../../models/enums/activity_type.dart';
+import '../widgets/assignment_content_widget.dart';
 
 class ActivityDetailScreen extends StatelessWidget {
   final Activity activity;
-  final bool isOffline;
   final SyncService _syncService = SyncService();
 
   ActivityDetailScreen({
     super.key,
     required this.activity,
-    required this.isOffline,
   });
 
-  Widget _buildActivityContent(BuildContext context) {
+  Widget _buildActivityContent(BuildContext context, bool isOffline) {
     switch (activity.type) {
       case ActivityType.RESOURCE:
         if (activity is Resource) {
-          return _buildResourceContent(context, activity as Resource);
+          return _buildResourceContent(
+              context, activity as Resource, isOffline);
         }
         return const Center(child: Text('Ressource non disponible'));
       case ActivityType.QUIZ:
@@ -39,7 +43,8 @@ class ActivityDetailScreen extends StatelessWidget {
     return const Center(child: Text('Contenu du forum à implémenter'));
   }
 
-  Widget _buildResourceContent(BuildContext context, Resource resource) {
+  Widget _buildResourceContent(
+      BuildContext context, Resource resource, bool isOffline) {
     Widget resourceTypeIcon;
     String resourceDescription;
 
@@ -96,77 +101,9 @@ class ActivityDetailScreen extends StatelessWidget {
                   ],
                   const SizedBox(height: 16),
                   if (resource.offlineAvailable && isOffline)
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        try {
-                          final localPath =
-                              await _syncService.getLocalResourcePath(resource);
-                          if (localPath != null) {
-                            await FileHelper.openResource(
-                                localPath, null, resource.mimeType ?? '');
-                          } else {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content: Text('Fichier non trouvé')),
-                              );
-                            }
-                          }
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                  content:
-                                      Text('Erreur lors de l\'ouverture: $e')),
-                            );
-                          }
-                        }
-                      },
-                      icon: const Icon(Icons.folder_open),
-                      label: const Text('Ouvrir'),
-                    )
+                    _buildOpenButton(context, resource)
                   else if (!isOffline)
-                    // Pour les ressources en ligne (comme les liens)
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        try {
-                          if (resource.resourceType == ResourceType.LINK) {
-                            await FileHelper.openResource(
-                                null, resource.url, resource.mimeType ?? '');
-                          } else if (resource.downloadable) {
-                            final localPath = await _syncService
-                                .getLocalResourcePath(resource);
-                            if (localPath != null) {
-                              await FileHelper.openResource(
-                                  localPath, null, resource.mimeType ?? '');
-                            } else {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                        'Téléchargez d\'abord la ressource'),
-                                  ),
-                                );
-                              }
-                            }
-                          }
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                  content:
-                                      Text('Erreur lors de l\'ouverture: $e')),
-                            );
-                          }
-                        }
-                      },
-                      icon: resource.resourceType == ResourceType.LINK
-                          ? const Icon(Icons.open_in_new)
-                          : const Icon(Icons.folder_open),
-                      label: resource.resourceType == ResourceType.LINK
-                          ? const Text('Ouvrir le lien')
-                          : const Text('Ouvrir'),
-                    ),
+                    _buildOnlineButton(context, resource),
                 ],
               ),
             ),
@@ -174,6 +111,56 @@ class ActivityDetailScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Widget _buildOpenButton(BuildContext context, Resource resource) {
+    return ElevatedButton.icon(
+      onPressed: () => _openResource(context, resource),
+      icon: const Icon(Icons.folder_open),
+      label: const Text('Ouvrir'),
+    );
+  }
+
+  Widget _buildOnlineButton(BuildContext context, Resource resource) {
+    final isLink = resource.resourceType == ResourceType.LINK;
+    return ElevatedButton.icon(
+      onPressed: () => _openResource(context, resource),
+      icon: Icon(isLink ? Icons.open_in_new : Icons.folder_open),
+      label: Text(isLink ? 'Ouvrir le lien' : 'Ouvrir'),
+    );
+  }
+
+  Future<void> _openResource(BuildContext context, Resource resource) async {
+    final isOnline = context.read<ConnectivityProvider>().isOnline;
+
+    try {
+      final localPath = await _syncService.getLocalResourcePath(resource);
+      if (localPath != null) {
+        await FileHelper.openResource(localPath, null, resource.mimeType ?? '');
+        return;
+      }
+
+      if (isOnline) {
+        final serverUrl = dotenv.env['SERVER_URL'] ?? '';
+        final resourceUrl = '$serverUrl/${resource.url}';
+        await FileHelper.openResource(
+            null, resourceUrl, resource.mimeType ?? '');
+        return;
+      }
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ressource non disponible hors ligne')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Erreur lors de l\'ouverture de la ressource')),
+        );
+      }
+    }
   }
 
   String _formatFileSize(int bytes) {
@@ -190,7 +177,18 @@ class ActivityDetailScreen extends StatelessWidget {
   }
 
   Widget _buildAssignmentContent(BuildContext context) {
-    return const Center(child: Text('Contenu du devoir à implémenter'));
+    if (activity is Assignment) {
+      return AssignmentContentWidget(
+        assignment: activity as Assignment,
+      ).build(context);
+    } else {
+      return const Center(
+        child: Text(
+          'Type de devoir non pris en charge',
+          style: TextStyle(color: Colors.red),
+        ),
+      );
+    }
   }
 
   Widget _buildContentActivity(BuildContext context) {
@@ -199,48 +197,64 @@ class ActivityDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(activity.title),
-        actions: [
-          if (isOffline)
-            const Padding(
-              padding: EdgeInsets.all(8.0),
-              child: Icon(Icons.offline_bolt, color: Colors.orange),
-            ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (activity.startDate != null || activity.endDate != null)
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Card(
-                  child: Padding(
+    return Consumer<ConnectivityProvider>(
+      builder: (context, connectivity, _) {
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(activity.title),
+            actions: [
+              if (!connectivity.isOnline)
+                const Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: Icon(Icons.offline_bolt, color: Colors.orange),
+                ),
+            ],
+          ),
+          body: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (activity.startDate != null || activity.endDate != null)
+                  Padding(
                     padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (activity.startDate != null)
-                          Text(
-                              'Début: ${_formatDateTime(activity.startDate!)}'),
-                        if (activity.endDate != null) ...[
-                          const SizedBox(height: 8),
-                          Text('Fin: ${_formatDateTime(activity.endDate!)}'),
-                        ],
-                      ],
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (activity.startDate != null)
+                              Text(
+                                  'Début: ${_formatDateTime(activity.startDate!)}'),
+                            if (activity.endDate != null) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                  'Fin: ${_formatDateTime(activity.endDate!)}'),
+                            ],
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-            Expanded(child: _buildActivityContent(context)),
-          ],
-        ),
-      ),
+                _buildActivityContent(context, !connectivity.isOnline),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
+
+  /*Future<String> _downloadResource(String url, String fileName) async {
+    final directory = await getTemporaryDirectory();
+    final filePath = '${directory.path}/$fileName';
+
+    final dio = Dio();
+    print(url);
+    await dio.download(url, filePath);
+
+    return filePath;
+  }*/
 
   String _formatDateTime(DateTime date) {
     return '${date.day}/${date.month}/${date.year} à ${date.hour}:${date.minute.toString().padLeft(2, '0')}';

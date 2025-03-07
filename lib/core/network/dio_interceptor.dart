@@ -1,7 +1,20 @@
 import 'package:dio/dio.dart';
 import '../exceptions/app_exception.dart';
+import '../services/storage_service.dart';
 
 class ApiInterceptor extends Interceptor {
+  final StorageService _storage = StorageService();
+
+  @override
+  void onRequest(
+      RequestOptions options, RequestInterceptorHandler handler) async {
+    final token = await _storage.getToken();
+    if (token != null) {
+      options.headers['Authorization'] = 'Bearer $token';
+    }
+    handler.next(options);
+  }
+
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
     print('Response Data: ${err.response?.data}'); // Pour déboguer

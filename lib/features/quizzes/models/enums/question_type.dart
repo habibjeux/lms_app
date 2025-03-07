@@ -1,0 +1,1 @@
+enum QuestionType { MCQ, SCQ, TRUE_FALSE, SHORT_ANSWER, MATCHING }

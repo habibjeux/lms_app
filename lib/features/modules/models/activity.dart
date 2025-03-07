@@ -1,6 +1,6 @@
 import '../../../core/models/base_model.dart';
-import '../../forum/models/forum.dart';
 import '../../quizzes/models/quiz.dart';
+import 'assignment.dart';
 import 'enums/activity_scope.dart';
 import 'enums/activity_type.dart';
 import 'resource.dart';
@@ -33,6 +33,7 @@ class Activity extends BaseModel {
     this.chapterId,
   });
 
+  @override
   factory Activity.fromJson(Map<String, dynamic> json) {
     ActivityType activityType = ActivityType.values.firstWhere(
       (e) => e.toString() == 'ActivityType.${json['type']}',
@@ -42,13 +43,9 @@ class Activity extends BaseModel {
       case ActivityType.RESOURCE:
         return Resource.fromJson(json);
       case ActivityType.QUIZ:
-        // TODO: Implémenter Quiz.fromJson
-        // return Quiz.fromJson(json);
-        break;
+        return Quiz.fromJson(json);
       case ActivityType.ASSIGNMENT:
-        // TODO: Implémenter Assignment.fromJson
-        // return Assignment.fromJson(json);
-        break;
+        return Assignment.fromJson(json);
       default:
         break;
     }
@@ -75,6 +72,7 @@ class Activity extends BaseModel {
     );
   }
 
+  @override
   Map<String, dynamic> toJson() {
     return {
       'id': id,

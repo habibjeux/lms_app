@@ -161,7 +161,6 @@ class ActivityItem extends StatelessWidget {
                 MaterialPageRoute(
                   builder: (context) => ActivityDetailScreen(
                     activity: activity,
-                    isOffline: false,
                   ),
                 ),
               );

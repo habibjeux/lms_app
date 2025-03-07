@@ -20,6 +20,13 @@ class OfflineStorageService {
     await _updateLastSync('modules');
   }
 
+  Future<void> saveModuleActivities(
+      String moduleId, List<dynamic> activities) async {
+    final box = await _openBox(activitiesBoxName);
+    await box.put(moduleId, json.encode(activities));
+    await _updateLastSync('module_activities_$moduleId');
+  }
+
   Future<List<dynamic>?> getModules() async {
     final box = await _openBox(moduleBoxName);
     final data = box.get('all_modules');
@@ -51,7 +58,16 @@ class OfflineStorageService {
     await _updateLastSync('activities_$chapterId');
   }
 
-  Future<List<dynamic>?> getActivities(String chapterId) async {
+  Future<List<dynamic>?> getModuleActivities(String moduleId) async {
+    final box = await _openBox(activitiesBoxName);
+    final data = box.get(moduleId);
+    if (data != null) {
+      return json.decode(data);
+    }
+    return null;
+  }
+
+  Future<List<dynamic>?> getChapterActivities(String chapterId) async {
     final box = await _openBox(activitiesBoxName);
     final data = box.get(chapterId);
     if (data != null) {
@@ -144,5 +160,9 @@ class OfflineStorageService {
       final box = await _openBox(boxName);
       await box.clear();
     }
+  }
+
+  Future<void> saveLastSync(String key, DateTime dateTime) async {
+    await _updateLastSync(key);
   }
 }

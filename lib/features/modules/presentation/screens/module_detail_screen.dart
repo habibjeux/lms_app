@@ -1,12 +1,13 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../../core/services/sync_service.dart';
+import '../../../../core/providers/connectivity_provider.dart';
 import '../../../../core/widgets/buttons/download_button.dart';
 import '../../models/module.dart';
 import '../../models/chapter.dart';
+import '../../models/activity.dart';
 import '../widgets/chapter_widget.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
+import '../widgets/module_activity.dart';
 
 class ModuleDetailScreen extends StatefulWidget {
   final Module module;
@@ -18,20 +19,18 @@ class ModuleDetailScreen extends StatefulWidget {
 }
 
 class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
-  final SyncService _syncService = SyncService();
   final ScrollController _scrollController = ScrollController();
-
+  final SyncService _syncService = SyncService();
   late Future<List<Chapter>> _chaptersFuture;
   List<Chapter> _visibleChapters = [];
-  int _currentChapterIndex = 0;
-  bool _isOffline = false;
   bool _isSyncing = false;
+  final Map<String, List<Activity>> _chapterActivities = {};
+  final Map<String, bool> _expandedChapters = {};
+  List<Activity> _moduleActivities = [];
 
   @override
   void initState() {
     super.initState();
-    _checkConnectivity();
-    _setupConnectivityListener();
     _initializeChapters();
   }
 
@@ -41,64 +40,23 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
     super.dispose();
   }
 
-  Future<bool> isOnline() async {
-    final List<ConnectivityResult> connectivityResult =
-        await (Connectivity().checkConnectivity());
-
-    if (connectivityResult.contains(ConnectivityResult.none)) {
-      return false;
-    }
-
-    try {
-      // Vérification via DNS lookup
-      final result = await InternetAddress.lookup('google.com');
-      if (result.isEmpty || result[0].rawAddress.isEmpty) {
-        return false;
-      }
-
-      // Vérification avec un ping (optionnel)
-      final pingResult = await Process.run(
-        'ping',
-        ['-c', '1', 'google.com'],
-        runInShell: true,
-      );
-
-      if (pingResult.exitCode == 0) {
-        return true;
-      }
-    } on SocketException catch (_) {
-      return false;
-    } on ProcessException catch (_) {
-      return false;
-    }
-
-    return false;
-  }
-
-  Future<void> _checkConnectivity() async {
-    final isOffline = !(await isOnline());
-    if (mounted) {
-      setState(() {
-        _isOffline = isOffline;
-      });
-    }
-  }
-
-  void _setupConnectivityListener() {
-    Connectivity()
-        .onConnectivityChanged
-        .listen((List<ConnectivityResult> result) async {
-      final isOffline = !(await isOnline());
-      if (mounted) {
-        setState(() {
-          _isOffline = isOffline;
-        });
-      }
-    });
-  }
-
   void _initializeChapters() {
     _chaptersFuture = _loadChapters();
+    _chaptersFuture.then((chapters) {
+      // Précharger les activités pour tous les chapitres
+      for (var chapter in chapters) {
+        _loadActivitiesForChapter(chapter);
+        // Par défaut, seul le premier chapitre est développé
+        if (_expandedChapters.isEmpty) {
+          _expandedChapters[chapter.id] = true;
+        } else {
+          _expandedChapters[chapter.id] = false;
+        }
+      }
+
+      // Charger les activités du module (sans chapitre associé)
+      _loadModuleActivities();
+    });
   }
 
   Future<List<Chapter>> _loadChapters() async {
@@ -106,12 +64,10 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
       final chaptersData = await _syncService.getChapters(widget.module.id);
       return _processChaptersData(chaptersData);
     } catch (e) {
-      // En cas d'erreur, essayer de charger depuis le cache
       try {
         final cachedChapters = await _syncService.getChapters(widget.module.id);
         return _processChaptersData(cachedChapters);
       } catch (cacheError) {
-        // Si même le cache échoue, propager l'erreur
         throw Exception('Impossible de charger les chapitres: $cacheError');
       }
     }
@@ -130,6 +86,56 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
       });
     }
     return chapters;
+  }
+
+  Future<void> _loadActivitiesForChapter(Chapter chapter) async {
+    try {
+      final activitiesData =
+          await _syncService.getChapterActivities(chapter.id);
+      final activities = activitiesData
+          .map((data) => Activity.fromJson(data))
+          .where((activity) => activity.visible)
+          .toList()
+        ..sort((a, b) => a.order.compareTo(b.order));
+
+      if (mounted) {
+        setState(() {
+          _chapterActivities[chapter.id] = activities;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur de chargement des activités: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _loadModuleActivities() async {
+    try {
+      final activitiesData =
+          await _syncService.getModuleActivities(widget.module.id);
+      final activities = activitiesData
+          .map((data) => Activity.fromJson(data))
+          .where((activity) => activity.visible)
+          .toList()
+        ..sort((a, b) => a.order.compareTo(b.order));
+
+      if (mounted) {
+        setState(() {
+          _moduleActivities = activities;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content:
+                  Text('Erreur de chargement des activités du module: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _refreshContent() async {
@@ -160,6 +166,8 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
       );
 
       _initializeChapters();
+      _chapterActivities.clear();
+      _moduleActivities.clear();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -181,110 +189,46 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
     }
   }
 
-  void _showChaptersList() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Align(
-          alignment: Alignment.centerRight,
-          child: Material(
-            color: Colors.transparent,
-            child: SizedBox(
-              width: MediaQuery.of(context).size.width * 0.85,
-              height: MediaQuery.of(context).size.height,
-              child: Scaffold(
-                appBar: AppBar(
-                  leading: IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                  title: const Text('Sommaire'),
-                ),
-                body: ListView.builder(
-                  itemCount: _visibleChapters.length,
-                  itemBuilder: (context, index) {
-                    return ListTile(
-                      title: Text(
-                        _visibleChapters[index].title,
-                        style: TextStyle(
-                          fontWeight: index == _currentChapterIndex
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                          color: index == _currentChapterIndex
-                              ? Theme.of(context).primaryColor
-                              : Colors.black,
-                        ),
-                      ),
-                      subtitle: _visibleChapters[index].description.isNotEmpty
-                          ? Text(_visibleChapters[index].description)
-                          : null,
-                      onTap: () {
-                        setState(() {
-                          _currentChapterIndex = index;
-                        });
-                        Navigator.of(context).pop();
-                      },
-                    );
-                  },
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _navigateChapter(int direction) {
-    if (direction > 0 && _currentChapterIndex >= _visibleChapters.length - 1) {
-      return;
-    }
-    if (direction < 0 && _currentChapterIndex <= 0) {
-      return;
-    }
-
-    setState(() {
-      _currentChapterIndex += direction;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: FutureBuilder<List<Chapter>>(
-        future: _chaptersFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+    final isOnline =
+        Provider.of<ConnectivityProvider>(context, listen: false).isOnline;
 
-          if (snapshot.hasError) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text('Erreur: ${snapshot.error}'),
-                  if (!_isOffline) ...[
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: _refreshContent,
-                      child: const Text('Réessayer'),
-                    ),
-                  ],
-                ],
-              ),
-            );
-          }
+    return Consumer<ConnectivityProvider>(
+      builder: (context, connectivity, child) {
+        return Scaffold(
+          body: FutureBuilder<List<Chapter>>(
+            future: _chaptersFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          if (_visibleChapters.isEmpty) {
-            return const Center(
-              child: Text('Aucun chapitre disponible'),
-            );
-          }
+              if (snapshot.hasError) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text('Erreur: ${snapshot.error}'),
+                      if (connectivity.isOnline) ...[
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: _refreshContent,
+                          child: const Text('Réessayer'),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              }
 
-          return Stack(
-            children: [
-              RefreshIndicator(
+              if (_visibleChapters.isEmpty) {
+                return const Center(
+                  child: Text('Aucun chapitre disponible'),
+                );
+              }
+
+              return RefreshIndicator(
                 onRefresh: _refreshContent,
                 child: CustomScrollView(
                   controller: _scrollController,
@@ -293,12 +237,6 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
                       title: Text(widget.module.title),
                       floating: true,
                       actions: [
-                        if (_isOffline)
-                          const Padding(
-                            padding: EdgeInsets.all(8.0),
-                            child:
-                                Icon(Icons.offline_bolt, color: Colors.orange),
-                          ),
                         if (_isSyncing)
                           const Padding(
                             padding: EdgeInsets.all(8.0),
@@ -308,95 +246,71 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             ),
                           ),
-                        DownloadButton(
-                          moduleId: widget.module.id,
-                          onComplete: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Module disponible hors ligne'),
-                              ),
-                            );
-                          },
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.menu_book),
-                          onPressed: _showChaptersList,
-                          tooltip: 'Liste des chapitres',
-                        ),
+                        if (isOnline)
+                          DownloadButton(
+                            moduleId: widget.module.id,
+                            onComplete: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Module disponible hors ligne'),
+                                ),
+                              );
+                            },
+                          ),
                       ],
                     ),
+                    // Afficher les chapitres avec leurs activités
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final chapter = _visibleChapters[index];
+                            final isExpanded =
+                                _expandedChapters[chapter.id] ?? false;
+                            final activities =
+                                _chapterActivities[chapter.id] ?? [];
+                            final isLoading =
+                                !_chapterActivities.containsKey(chapter.id);
+
+                            return ChapterAccordion(
+                              chapter: chapter,
+                              activities: activities,
+                              isExpanded: isExpanded,
+                              isLoading: isLoading,
+                              onExpandChanged: (expanded) {
+                                setState(() {
+                                  _expandedChapters[chapter.id] = expanded;
+                                });
+                              },
+                            );
+                          },
+                          childCount: _visibleChapters.length,
+                        ),
+                      ),
+                    ),
+                    // Afficher les activités du module (sans chapitre) en bas
                     SliverToBoxAdapter(
-                      child: Column(
-                        children: [
-                          ChapterWidget(
-                            chapter: _visibleChapters[_currentChapterIndex],
-                            isOffline: _isOffline,
-                          ),
-                          SizedBox(
-                            height: MediaQuery.of(context).size.height * 0.1,
-                          ),
-                        ],
+                      child: ModuleActivitiesSection(
+                        activities: _moduleActivities,
+                        moduleId: widget.module.id,
+                        isLoading:
+                            _chapterActivities.length < _visibleChapters.length,
+                      ),
+                    ),
+                    // Espace en bas pour éviter que le dernier élément soit masqué par la barre de navigation
+                    SliverToBoxAdapter(
+                      child: SizedBox(
+                        height: MediaQuery.of(context).padding.bottom + 16,
                       ),
                     ),
                   ],
                 ),
-              ),
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  padding: EdgeInsets.only(
-                    bottom: MediaQuery.of(context).padding.bottom,
-                    top: 8,
-                    left: 8,
-                    right: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black12,
-                        blurRadius: 10,
-                        offset: const Offset(0, -3),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back),
-                        onPressed: _currentChapterIndex > 0
-                            ? () => _navigateChapter(-1)
-                            : null,
-                        color: _currentChapterIndex > 0
-                            ? Theme.of(context).primaryColor
-                            : Colors.grey,
-                      ),
-                      Text(
-                        'Chapitre ${_currentChapterIndex + 1}/${_visibleChapters.length}',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.arrow_forward),
-                        onPressed:
-                            _currentChapterIndex < _visibleChapters.length - 1
-                                ? () => _navigateChapter(1)
-                                : null,
-                        color:
-                            _currentChapterIndex < _visibleChapters.length - 1
-                                ? Theme.of(context).primaryColor
-                                : Colors.grey,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }

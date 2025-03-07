@@ -18,7 +18,7 @@ class AuthRepository {
   }
 
   void _setAuthHeader(String token) {
-    _dio.options.headers['Authorization'] = 'Bearer $token';
+    ApiClient.setAuthToken(token);
   }
 
   Future<User> login(String email, String password) async {

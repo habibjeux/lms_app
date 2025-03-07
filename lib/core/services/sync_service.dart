@@ -1,12 +1,15 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
+import 'package:hive/hive.dart';
 import '../../features/modules/models/activity.dart';
+import '../../features/modules/models/assignment_attachment.dart';
 import '../../features/modules/models/resource.dart';
 import '../network/api_client.dart';
 import 'download_storage_service.dart';
 import 'offline_storage_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
+import 'dart:convert';
 
 class SyncService {
   final OfflineStorageService _storage = OfflineStorageService();
@@ -183,6 +186,7 @@ class SyncService {
           await _useCachedDataIfAvailable(moduleId);
         }
       }
+
       progress = 0.25;
       onProgress?.call(progress);
 
@@ -213,6 +217,22 @@ class SyncService {
           await _useCachedDataIfAvailable(moduleId, dataType: 'chapters');
         }
       }
+
+      // 4. Synchroniser les activités du module
+      if (force || await _storage.isDataStale('module_activities_$moduleId')) {
+        try {
+          final moduleActivitiesData =
+              await _api.get('/modules/$moduleId/activities');
+          await _storage.saveModuleActivities(
+              moduleId, moduleActivitiesData.data['data']);
+        } catch (e) {
+          onError?.call(
+              'Erreur lors de la synchronisation des activités du module: ${e.toString()}');
+          await _useCachedDataIfAvailable(moduleId,
+              dataType: 'module_activities');
+        }
+      }
+
       progress = 0.75;
       onProgress?.call(progress);
 
@@ -222,6 +242,28 @@ class SyncService {
     } finally {
       _isSyncing = false;
     }
+  }
+
+  Future<List<Map<String, dynamic>>> getModuleActivities(
+      String moduleId) async {
+    try {
+      if (await isOnline()) {
+        final response = await _api.get('/modules/$moduleId/activities');
+        return List<Map<String, dynamic>>.from(response.data['data']);
+      }
+      return await _getOfflineModuleActivities(moduleId);
+    } catch (e) {
+      return await _getOfflineModuleActivities(moduleId);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _getOfflineModuleActivities(
+      String moduleId) async {
+    final cachedData = await _storage.getModuleActivities(moduleId);
+    if (cachedData != null) {
+      return List<Map<String, dynamic>>.from(cachedData);
+    }
+    throw Exception('Activités du module non disponibles hors ligne');
   }
 
   Future<List<Map<String, dynamic>>> getChapters(String moduleId) async {
@@ -264,7 +306,7 @@ class SyncService {
 
   Future<List<Map<String, dynamic>>> _getOfflineActivities(
       String chapterId) async {
-    final cachedData = await _storage.getActivities(chapterId);
+    final cachedData = await _storage.getChapterActivities(chapterId);
     if (cachedData != null) {
       return List<Map<String, dynamic>>.from(cachedData);
     }
@@ -286,9 +328,220 @@ class SyncService {
         await _getOfflineChapters(moduleId);
       } else if (dataType == 'activities' && chapterId != null) {
         await _getOfflineActivities(chapterId);
+      } else if (dataType == 'module_activities') {
+        await _getOfflineModuleActivities(moduleId);
       }
     } catch (e) {
       rethrow;
+    }
+  }
+}
+
+extension AssignmentExtensions on SyncService {
+  Future<void> downloadAttachment(
+    AssignmentAttachment attachment, {
+    void Function(double)? individualProgress,
+  }) async {
+    if (!await isOnline()) {
+      throw Exception('Pas de connexion Internet');
+    }
+
+    try {
+      final localPath = await _getAttachmentLocalPath();
+      final fileName = attachment.url.split('/').last;
+      final file = File('$localPath/$fileName');
+
+      if (await file.exists()) {
+        await _downloadStorage.markResourceAsDownloaded(attachment.id);
+        return;
+      }
+
+      final response = await _apiUpload.get(
+        attachment.url,
+        options: Options(
+          responseType: ResponseType.bytes,
+          followRedirects: true,
+        ),
+        onReceiveProgress: (received, total) {
+          if (total != -1 && individualProgress != null) {
+            individualProgress(received / total);
+          }
+        },
+      );
+
+      await file.writeAsBytes(response.data);
+      await _downloadStorage.markResourceAsDownloaded(attachment.id);
+    } catch (e) {
+      print('Erreur lors du téléchargement de la pièce jointe: $e');
+      rethrow;
+    }
+  }
+
+  Future<String?> getLocalAttachmentPath(
+      AssignmentAttachment attachment) async {
+    if (!await _downloadStorage.isResourceDownloaded(attachment.id)) {
+      return null;
+    }
+
+    try {
+      final localPath = await _getAttachmentLocalPath();
+      final fileName = attachment.url.split('/').last;
+      final file = File('$localPath/$fileName');
+
+      if (await file.exists()) {
+        return file.path;
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<String> _getAttachmentLocalPath() async {
+    final directory = await getApplicationDocumentsDirectory();
+    final path = '${directory.path}/attachments';
+    await Directory(path).create(recursive: true);
+    return path;
+  }
+
+  Future<void> syncPendingAssignmentSubmissions() async {
+    if (!await isOnline()) {
+      return;
+    }
+
+    try {
+      final syncQueueBox = await Hive.openBox('sync_queue');
+      final pendingSubmissionsBox = await Hive.openBox('pending_submissions');
+
+      final List<dynamic> pendingSubmissions =
+          syncQueueBox.get('assignments_queue', defaultValue: []);
+
+      if (pendingSubmissions.isEmpty) {
+        return;
+      }
+
+      for (String submissionId in List<String>.from(pendingSubmissions)) {
+        final submission = pendingSubmissionsBox.get(submissionId);
+
+        if (submission == null) {
+          // Suppression de la référence si la soumission n'existe plus
+          pendingSubmissions.remove(submissionId);
+          continue;
+        }
+
+        try {
+          // Préparation des fichiers pour l'upload
+          List<String> localFilePaths = List<String>.from(submission['files']);
+          List<String> uploadedFilePaths = [];
+
+          // Upload des fichiers
+          for (String filePath in localFilePaths) {
+            final file = File(filePath);
+            if (await file.exists()) {
+              final fileName = filePath.split('/').last;
+              final formData = FormData.fromMap({
+                'file':
+                    await MultipartFile.fromFile(file.path, filename: fileName),
+              });
+
+              final response = await _apiUpload.post(
+                '/uploads',
+                data: formData,
+              );
+
+              if (response.statusCode == 200 || response.statusCode == 201) {
+                uploadedFilePaths.add(response.data['filePath']);
+              } else {
+                throw Exception(
+                    'Erreur lors de l\'upload du fichier $fileName');
+              }
+            }
+          }
+
+          // Soumission du devoir
+          final body = {
+            'assignmentId': submission['assignmentId'],
+            'files': uploadedFilePaths,
+            'comment': submission['comment'],
+            'isLate': submission['isLate'],
+          };
+
+          final Response response;
+          if (submission['existingSubmissionId'] != null) {
+            response = await _api.put(
+              '/assignment-submissions/${submission['existingSubmissionId']}',
+              data: body,
+            );
+          } else {
+            response = await _api.post(
+              '/assignment-submissions',
+              data: body,
+            );
+          }
+
+          if (response.statusCode == 200 || response.statusCode == 201) {
+            // Mise à jour du statut de la soumission
+            submission['status'] = 'completed';
+            await pendingSubmissionsBox.put(submissionId, submission);
+
+            // Suppression de la file d'attente
+            pendingSubmissions.remove(submissionId);
+
+            // Nettoyage des fichiers temporaires
+            for (String filePath in localFilePaths) {
+              final file = File(filePath);
+              if (await file.exists()) {
+                await file.delete();
+              }
+            }
+          } else {
+            throw Exception('Erreur lors de la soumission du devoir');
+          }
+        } catch (e) {
+          print(
+              'Erreur lors de la synchronisation de la soumission $submissionId: $e');
+          // En cas d'erreur, on garde la soumission dans la file pour une tentative ultérieure
+        }
+      }
+
+      // Mise à jour de la file d'attente
+      await syncQueueBox.put('assignments_queue', pendingSubmissions);
+    } catch (e) {
+      print('Erreur lors de la synchronisation des soumissions de devoirs: $e');
+    }
+  }
+
+  Future<int> getPendingSubmissionsCount() async {
+    try {
+      final syncQueueBox = await Hive.openBox('sync_queue');
+      final List<dynamic> pendingSubmissions =
+          syncQueueBox.get('assignments_queue', defaultValue: []);
+      return pendingSubmissions.length;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  Future<void> syncAssignmentData(String moduleId) async {
+    if (!await isOnline()) {
+      return;
+    }
+
+    try {
+      final response = await _api.get('/modules/$moduleId/assignments');
+
+      if (response.statusCode == 200) {
+        final assignments = List<Map<String, dynamic>>.from(response.data);
+
+        // Stockage des assignments dans Hive
+        final assignmentsBox = await Hive.openBox('assignments');
+        await assignmentsBox.put(moduleId, json.encode(assignments));
+
+        // Mise à jour de la date de dernière synchronisation
+        await _storage.saveLastSync('assignments_$moduleId', DateTime.now());
+      }
+    } catch (e) {
+      print('Erreur lors de la synchronisation des devoirs: $e');
     }
   }
 }

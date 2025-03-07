@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:lms_app/features/auth/presentation/screens/login_screen.dart';
 import 'package:lms_app/features/forum/providers/forums_provider.dart';
 import 'package:lms_app/features/modules/providers/modules_provider.dart';
@@ -16,8 +17,11 @@ import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart' as path_provider;
 import 'package:timeago/timeago.dart' as timeago;
 
+import 'features/quizzes/data/providers/quiz_provider.dart';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
 
   final appDocumentDir = await path_provider.getApplicationDocumentsDirectory();
   Hive.init(appDocumentDir.path);
@@ -38,6 +42,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ModulesProvider()),
         ChangeNotifierProvider(create: (_) => MeetingsProvider()),
         ChangeNotifierProvider(create: (_) => ForumProvider()),
+        ChangeNotifierProvider(create: (_) => QuizProvider()),
       ],
       child: MaterialApp(
           builder: (context, child) => ConnectivityOverlay(child: child!),
