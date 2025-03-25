@@ -8,23 +8,37 @@ class MeetingScreen extends StatefulWidget {
   const MeetingScreen({super.key});
 
   @override
-  _MeetingScreenState createState() => _MeetingScreenState();
+  MeetingScreenState createState() => MeetingScreenState();
 }
 
-class _MeetingScreenState extends State<MeetingScreen> {
+class MeetingScreenState extends State<MeetingScreen> {
   final JitsiMeet _jitsiMeet = JitsiMeet();
   bool _isLoading = false;
+  bool _hasMeetingStarted = false;
   String? _errorMessage;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _joinMeeting(context);
+    });
+  }
+
   Future<void> _joinMeeting(BuildContext context) async {
-    final authProvider = context.read<AuthProvider>();
     final meetingProvider = context.read<MeetingsProvider>();
-    final user = authProvider.user;
-    final appId = 'vpaas-magic-cookie-7179a7d37d344199899dd8e8cb24afb4';
+    final user = context.read<AuthProvider>().user;
 
     if (user == null) {
       setState(() {
         _errorMessage = 'Utilisateur non connecté';
+      });
+      return;
+    }
+
+    if (meetingProvider.token.isEmpty || meetingProvider.roomName.isEmpty) {
+      setState(() {
+        _errorMessage = 'Informations de séance non disponibles';
       });
       return;
     }
@@ -35,27 +49,52 @@ class _MeetingScreenState extends State<MeetingScreen> {
     });
 
     try {
-      await meetingProvider.loadJitsiToken();
-      final token = meetingProvider.token;
+      final Map<String, dynamic> configOverrides = {
+        "startWithAudioMuted": true,
+        "startWithVideoMuted": true,
+        "prejoinPageEnabled": false,
+      };
+
+      configOverrides["toolbarButtons"] = [
+        'microphone',
+        'camera',
+        'hangup',
+        'chat',
+        'raisehand',
+        'videoquality',
+        'filmstrip',
+        'tileview',
+        'help',
+      ];
+
+      configOverrides["liveStreamingEnabled"] = false;
+      configOverrides["recordingEnabled"] = true;
+      configOverrides["disableInviteFunctions"] = true;
+      configOverrides["disablePolls"] = true;
+      configOverrides["disablePrivateChat"] = true;
 
       final options = JitsiMeetConferenceOptions(
         serverURL: "https://8x8.vc",
-        room: "$appId/course-session-1", //
-
-        token: token,
-        configOverrides: {
-          "startWithAudioMuted": true,
-          "startWithVideoMuted": true,
-          "prejoinPageEnabled": false,
-        },
+        room: meetingProvider.roomName,
+        token: meetingProvider.token,
+        configOverrides: configOverrides,
         featureFlags: {
           "ios.screensharing.enabled": true,
           "android.screensharing.enabled": true,
-          "meeting-name-set": true,
+          "meeting-name.enabled": true,
+          "chat.private.enabled": false,
+          "recording.enabled": true
         },
+        userInfo: JitsiMeetUserInfo(
+          displayName: '${user.firstName} ${user.lastName}',
+          email: user.email,
+        ),
       );
 
       await _jitsiMeet.join(options);
+      setState(() {
+        _hasMeetingStarted = true;
+      });
     } catch (e) {
       setState(() {
         _errorMessage = 'Impossible de rejoindre la réunion : ${e.toString()}';
@@ -69,11 +108,22 @@ class _MeetingScreenState extends State<MeetingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = context.read<AuthProvider>().user;
+    final meetingProvider = context.watch<MeetingsProvider>();
+    final sessionTitle = meetingProvider.sessionTitle;
+    final courseTitle = meetingProvider.courseTitle;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Réunion de cours'),
+        title: Text(sessionTitle.isNotEmpty ? sessionTitle : 'Séance de cours'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.call_end),
+            onPressed: () {
+              _jitsiMeet.hangUp();
+              Navigator.of(context).pop();
+            },
+          ),
+        ],
       ),
       body: Center(
         child: Padding(
@@ -82,25 +132,69 @@ class _MeetingScreenState extends State<MeetingScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (_isLoading)
-                const CircularProgressIndicator()
-              else ...[
-                Text(
-                  'Bienvenue, ${user?.firstName}',
-                  style: Theme.of(context).textTheme.headlineSmall,
+                Column(
+                  children: const [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Connexion à la séance en cours...'),
+                  ],
+                )
+              else if (_errorMessage != null)
+                Column(
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      size: 48,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      _errorMessage!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: () => _joinMeeting(context),
+                      child: const Text('Réessayer'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Retour'),
+                    ),
+                  ],
+                )
+              else if (_hasMeetingStarted)
+                const Text(
+                  'Vous êtes en cours de réunion. Si l\'interface d\'appel n\'apparaît pas automatiquement, utilisez le bouton ci-dessous pour quitter.',
+                  textAlign: TextAlign.center,
+                )
+              else
+                Column(
+                  children: [
+                    const Text(
+                      'Prêt à rejoindre',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (courseTitle.isNotEmpty)
+                      Text(
+                        courseTitle,
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: () => _joinMeeting(context),
+                      child: const Text('Rejoindre maintenant'),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 24),
-                if (_errorMessage != null)
-                  Text(
-                    _errorMessage!,
-                    style:
-                        TextStyle(color: Theme.of(context).colorScheme.error),
-                  ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () => _joinMeeting(context),
-                  child: const Text('Rejoindre la réunion'),
-                ),
-              ],
             ],
           ),
         ),
