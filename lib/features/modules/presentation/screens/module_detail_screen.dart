@@ -43,18 +43,14 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
   void _initializeChapters() {
     _chaptersFuture = _loadChapters();
     _chaptersFuture.then((chapters) {
-      // Précharger les activités pour tous les chapitres
       for (var chapter in chapters) {
         _loadActivitiesForChapter(chapter);
-        // Par défaut, seul le premier chapitre est développé
         if (_expandedChapters.isEmpty) {
           _expandedChapters[chapter.id] = true;
         } else {
           _expandedChapters[chapter.id] = false;
         }
       }
-
-      // Charger les activités du module (sans chapitre associé)
       _loadModuleActivities();
     });
   }
@@ -222,9 +218,9 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
                 );
               }
 
-              if (_visibleChapters.isEmpty) {
+              if (_visibleChapters.isEmpty && _moduleActivities.isEmpty) {
                 return const Center(
-                  child: Text('Aucun chapitre disponible'),
+                  child: Text('Aucun contenu disponible'),
                 );
               }
 
@@ -259,46 +255,47 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
                           ),
                       ],
                     ),
-                    // Afficher les chapitres avec leurs activités
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
-                      sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            final chapter = _visibleChapters[index];
-                            final isExpanded =
-                                _expandedChapters[chapter.id] ?? false;
-                            final activities =
-                                _chapterActivities[chapter.id] ?? [];
-                            final isLoading =
-                                !_chapterActivities.containsKey(chapter.id);
+                    if (_visibleChapters.isNotEmpty)
+                      SliverPadding(
+                        padding:
+                            const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
+                        sliver: SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                              final chapter = _visibleChapters[index];
+                              final isExpanded =
+                                  _expandedChapters[chapter.id] ?? false;
+                              final activities =
+                                  _chapterActivities[chapter.id] ?? [];
+                              final isLoading =
+                                  !_chapterActivities.containsKey(chapter.id);
 
-                            return ChapterAccordion(
-                              chapter: chapter,
-                              activities: activities,
-                              isExpanded: isExpanded,
-                              isLoading: isLoading,
-                              onExpandChanged: (expanded) {
-                                setState(() {
-                                  _expandedChapters[chapter.id] = expanded;
-                                });
-                              },
-                            );
-                          },
-                          childCount: _visibleChapters.length,
+                              return ChapterAccordion(
+                                chapter: chapter,
+                                activities: activities,
+                                isExpanded: isExpanded,
+                                isLoading: isLoading,
+                                onExpandChanged: (expanded) {
+                                  setState(() {
+                                    _expandedChapters[chapter.id] = expanded;
+                                  });
+                                },
+                              );
+                            },
+                            childCount: _visibleChapters.length,
+                          ),
                         ),
                       ),
-                    ),
-                    // Afficher les activités du module (sans chapitre) en bas
-                    SliverToBoxAdapter(
-                      child: ModuleActivitiesSection(
-                        activities: _moduleActivities,
-                        moduleId: widget.module.id,
-                        isLoading:
-                            _chapterActivities.length < _visibleChapters.length,
+                    // Affichage des activités du module même sans chapitres
+                    if (_moduleActivities.isNotEmpty)
+                      SliverToBoxAdapter(
+                        child: ModuleActivitiesSection(
+                          activities: _moduleActivities,
+                          moduleId: widget.module.id,
+                          isLoading: _chapterActivities.length <
+                              _visibleChapters.length,
+                        ),
                       ),
-                    ),
-                    // Espace en bas pour éviter que le dernier élément soit masqué par la barre de navigation
                     SliverToBoxAdapter(
                       child: SizedBox(
                         height: MediaQuery.of(context).padding.bottom + 16,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lms_app/features/meeting/presentation/screens/sessions_list_screen.dart';
 import 'package:lms_app/features/modules/presentation/screens/modules_screen.dart';
+import '../../../messaging/presentation/screens/discussions_screen.dart';
 import '../../../settings/presentation/screens/settings_screen.dart';
 import '../widgets/student_drawer.dart';
 import 'home_screen.dart';
@@ -18,6 +19,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final _pages = [
     const HomeScreen(),
     const ModulesScreen(),
+    const DiscussionsScreen(),
     const SessionsListScreen(),
     const SettingsScreen(),
   ];
@@ -44,6 +46,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             icon: Icon(Icons.school_outlined),
             selectedIcon: Icon(Icons.school),
             label: 'Modules',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.forum_outlined),
+            selectedIcon: Icon(Icons.forum),
+            label: 'Forums',
           ),
           NavigationDestination(
             icon: Icon(Icons.video_call_outlined),

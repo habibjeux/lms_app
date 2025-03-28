@@ -17,7 +17,7 @@ class AuthProvider with ChangeNotifier {
   User? get user => _user;
   bool get isAuthenticated => _user != null;
 
-  AuthProvider() {
+  AuthProvider(BuildContext context, {required bool listen}) {
     _initialize();
   }
 

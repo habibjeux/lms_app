@@ -783,7 +783,7 @@ class AssignmentContentWidget extends StatelessWidget {
 
   String _formatFileSize(int bytes) {
     if (bytes < 1024) {
-      return '${bytes} B';
+      return '$bytes B';
     } else if (bytes < 1024 * 1024) {
       final kilobytes = bytes / 1024;
       return '${kilobytes.toStringAsFixed(1)} KB';

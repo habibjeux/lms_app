@@ -51,6 +51,7 @@ class AssignmentSubmission extends BaseModel {
     );
   }
 
+  @override
   Map<String, dynamic> toJson() {
     return {
       'assignmentId': assignmentId,

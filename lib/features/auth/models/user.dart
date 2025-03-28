@@ -1,6 +1,4 @@
-// ignore: file_names
 import 'school.dart';
-import 'student.dart';
 
 // ignore: constant_identifier_names
 enum UserRole { SUPER_ADMIN, MANAGER, TEACHER, STUDENT }
@@ -19,7 +17,6 @@ class User {
   final DateTime? deletedAt;
 
   final School? school;
-  final Student? student;
 
   const User({
     required this.id,
@@ -34,7 +31,6 @@ class User {
     this.schoolId,
     this.deletedAt,
     this.school,
-    this.student,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {

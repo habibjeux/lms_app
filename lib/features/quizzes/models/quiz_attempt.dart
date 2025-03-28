@@ -61,6 +61,7 @@ class QuizAttempt extends BaseModel {
     );
   }
 
+  @override
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -174,7 +175,7 @@ class QuizAttempt extends BaseModel {
     final seconds = duration.inSeconds % 60;
 
     if (minutes > 0) {
-      return '$minutes min ${seconds} sec';
+      return '$minutes min $seconds sec';
     } else {
       return '$seconds secondes';
     }

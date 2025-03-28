@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:lms_app/features/auth/presentation/screens/login_screen.dart';
 import 'package:lms_app/features/forum/providers/forums_provider.dart';
+import 'package:lms_app/features/messaging/providers/messaging_provider.dart';
 import 'package:lms_app/features/modules/providers/modules_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -16,6 +17,7 @@ import 'features/modules/presentation/screens/modules_screen.dart';
 import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart' as path_provider;
 import 'package:timeago/timeago.dart' as timeago;
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'features/quizzes/data/providers/quiz_provider.dart';
 
@@ -27,6 +29,8 @@ Future<void> main() async {
   Hive.init(appDocumentDir.path);
 
   timeago.setLocaleMessages('fr', timeago.FrMessages());
+  await initializeDateFormatting('fr_FR', null);
+
   runApp(const MyApp());
 }
 
@@ -38,11 +42,13 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(
+            create: (_) => AuthProvider(context, listen: false)),
         ChangeNotifierProvider(create: (_) => ModulesProvider()),
         ChangeNotifierProvider(create: (_) => MeetingsProvider()),
         ChangeNotifierProvider(create: (_) => ForumProvider()),
         ChangeNotifierProvider(create: (_) => QuizProvider()),
+        ChangeNotifierProvider(create: (_) => MessagingProvider()),
       ],
       child: MaterialApp(
           builder: (context, child) => ConnectivityOverlay(child: child!),
