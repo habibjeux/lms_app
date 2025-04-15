@@ -25,34 +25,86 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen> {
   final TextEditingController _messageController = TextEditingController();
   final List<File> _selectedFiles = [];
   bool _isComposing = false;
+  bool _isInitialized = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadMessages();
-    });
+    _messageController.addListener(_handleTextChange);
+    // Utiliser un Future.microtask pour éviter les appels d'état pendant le build
+    Future.microtask(() => _loadMessages());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Recharger les messages à chaque changement de dépendances (navigation)
+    _loadMessages();
   }
 
   @override
   void dispose() {
+    _messageController.removeListener(_handleTextChange);
     _scrollController.dispose();
     _messageController.dispose();
     super.dispose();
   }
 
+  // Séparer la logique de changement de texte pour réduire les reconstructions
+  void _handleTextChange() {
+    final newIsComposing =
+        _messageController.text.trim().isNotEmpty || _selectedFiles.isNotEmpty;
+    if (_isComposing != newIsComposing) {
+      setState(() {
+        _isComposing = newIsComposing;
+      });
+    }
+  }
+
   Future<void> _loadMessages() async {
+    if (!mounted) return;
+
     final provider = Provider.of<MessagingProvider>(context, listen: false);
     await provider.loadMessages(widget.discussionId);
 
-    // Scroll to bottom after messages are loaded
+    if (mounted) {
+      setState(() {
+        _isInitialized = true;
+      });
+    }
+
+    // Utiliser un délai plus long pour s'assurer que le rendu est complet
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        _scrollToBottom(animate: false);
+      }
+    });
+  }
+
+  // Méthode séparée pour défiler vers le bas
+  void _scrollToBottom({bool animate = true}) {
+    if (!mounted) return;
+
+    // Assurez-vous que le widget est construit avant de tenter de défiler
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
+      if (!mounted || !_scrollController.hasClients) return;
+
+      try {
+        // S'assurer que nous sommes au maximum du défilement
+        final maxScroll = _scrollController.position.maxScrollExtent;
+
+        if (animate) {
+          _scrollController.animateTo(
+            maxScroll,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        } else {
+          _scrollController.jumpTo(maxScroll);
+        }
+      } catch (e) {
+        // Gérer silencieusement les erreurs de défilement
+        print('Erreur de défilement: $e');
       }
     });
   }
@@ -61,42 +113,52 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen> {
     final content = _messageController.text.trim();
     if (content.isEmpty && _selectedFiles.isEmpty) return;
 
+    // Effacer le contenu du message immédiatement pour une meilleure expérience utilisateur
+    final textContent = content;
+    _messageController.clear();
+
+    // Capturer les fichiers actuels et effacer la liste avant d'envoyer
+    final filesToSend = List<File>.from(_selectedFiles);
+    setState(() {
+      _selectedFiles.clear();
+      _isComposing = false;
+    });
+
     final provider = Provider.of<MessagingProvider>(context, listen: false);
 
     try {
-      if (_selectedFiles.isNotEmpty) {
+      if (filesToSend.isNotEmpty) {
         // Envoyer un message avec pièces jointes
         await provider.sendMessageWithAttachments(
           widget.discussionId,
-          content,
-          _selectedFiles,
+          textContent,
+          filesToSend,
         );
       } else {
         // Envoyer un message texte
         await provider.sendMessage(
           widget.discussionId,
-          content,
+          textContent,
         );
       }
 
-      // Effacer le contenu du message et les fichiers sélectionnés
-      _messageController.clear();
-      setState(() {
-        _selectedFiles.clear();
-        _isComposing = false;
-      });
+      // Forcer un reload des messages pour s'assurer que l'UI est à jour
+      if (mounted) {
+        // Délai légèrement plus long pour s'assurer que le backend a traité le message
+        Future.delayed(const Duration(milliseconds: 500), () async {
+          if (mounted) {
+            // Recharger les messages pour s'assurer qu'ils sont à jour
+            await provider.loadMessages(widget.discussionId);
 
-      // Scroll vers le bas pour voir le nouveau message
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _scrollController.hasClients) {
-          try {
-            _scrollController
-                .jumpTo(_scrollController.position.maxScrollExtent);
-          } catch (e) {
-            // Gestion des erreurs silencieuse
+            // Attendre encore un peu que l'UI se mette à jour avant de défiler
+            Future.delayed(const Duration(milliseconds: 200), () {
+              if (mounted) {
+                _scrollToBottom();
+              }
+            });
           }
-        }
-      });
+        });
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -114,6 +176,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen> {
     if (pickedFile != null) {
       setState(() {
         _selectedFiles.add(File(pickedFile.path));
+        _isComposing = true;
       });
     }
   }
@@ -142,6 +205,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen> {
             _selectedFiles.add(File(file.path!));
           }
         }
+        _isComposing = _selectedFiles.isNotEmpty;
       });
     }
   }
@@ -149,6 +213,8 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen> {
   void _removeFile(int index) {
     setState(() {
       _selectedFiles.removeAt(index);
+      _isComposing = _messageController.text.trim().isNotEmpty ||
+          _selectedFiles.isNotEmpty;
     });
   }
 
@@ -236,7 +302,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen> {
           Expanded(
             child: Consumer<MessagingProvider>(
               builder: (context, provider, child) {
-                if (provider.isLoadingMessages) {
+                if (provider.isLoadingMessages && !_isInitialized) {
                   return const Center(
                     child: CircularProgressIndicator(),
                   );
@@ -262,57 +328,88 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen> {
                 }
 
                 final messages = provider.messages;
+                if (messages.isEmpty && !provider.isLoadingMessages) {
+                  return const Center(
+                    child: Text('Aucun message. Commencez la conversation!'),
+                  );
+                }
+
                 final currentUserId =
                     Provider.of<AuthProvider>(context, listen: false)
                             .user
                             ?.id ??
                         '';
 
+                // Défiler vers le bas si des messages ont été ajoutés
+                // Supprimer le défilement automatique ici car il peut interférer
+                // avec les autres mécanismes de défilement
+
                 return GestureDetector(
                   onTap: () => FocusScope.of(context).unfocus(),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                    child: RefreshIndicator(
-                      onRefresh: _loadMessages,
-                      child: ListView.builder(
-                        controller: _scrollController,
-                        reverse: false,
-                        itemCount: messages.length,
-                        itemBuilder: (context, index) {
-                          final message = messages[index];
-                          final isMe = message.senderId == currentUserId;
+                    child: Stack(
+                      children: [
+                        RefreshIndicator(
+                          onRefresh: _loadMessages,
+                          child: ListView.builder(
+                            controller: _scrollController,
+                            reverse: false,
+                            itemCount: messages.length,
+                            itemBuilder: (context, index) {
+                              final message = messages[index];
+                              final isMe = message.senderId == currentUserId;
 
-                          // Vérifier si on doit afficher la date
-                          bool showDate = true;
-                          if (index > 0) {
-                            final prevMessage = messages[index - 1];
-                            final prevDate = DateTime(
-                              prevMessage.createdAt.year,
-                              prevMessage.createdAt.month,
-                              prevMessage.createdAt.day,
-                            );
-                            final currentDate = DateTime(
-                              message.createdAt.year,
-                              message.createdAt.month,
-                              message.createdAt.day,
-                            );
-                            showDate = prevDate != currentDate;
-                          }
+                              // Vérifier si on doit afficher la date - correction de la logique
+                              bool showDate = true;
+                              if (index > 0) {
+                                final prevMessage = messages[index - 1];
 
-                          return Column(
-                            children: [
-                              if (showDate)
-                                _buildDateSeparator(message.createdAt),
-                              MessageBubble(
-                                message: message,
-                                isMe: isMe,
-                                isPending: message.status == 'pending',
-                                isError: message.status == 'error',
+                                // S'assurer que les dates sont valides
+                                final prevDate = DateTime(
+                                  prevMessage.createdAt.year,
+                                  prevMessage.createdAt.month,
+                                  prevMessage.createdAt.day,
+                                );
+                                final currentDate = DateTime(
+                                  message.createdAt.year,
+                                  message.createdAt.month,
+                                  message.createdAt.day,
+                                );
+                                showDate =
+                                    !prevDate.isAtSameMomentAs(currentDate);
+                              }
+
+                              return Column(
+                                children: [
+                                  if (showDate)
+                                    _buildDateSeparator(message.createdAt),
+                                  MessageBubble(
+                                    message: message,
+                                    isMe: isMe,
+                                    isPending: message.status == 'pending',
+                                    isError: message.status == 'error',
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                        if (provider.isLoadingMessages && _isInitialized)
+                          const Positioned(
+                            top: 8,
+                            left: 0,
+                            right: 0,
+                            child: Center(
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2.0),
                               ),
-                            ],
-                          );
-                        },
-                      ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 );
@@ -367,6 +464,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen> {
                 onPressed: () {
                   setState(() {
                     _selectedFiles.clear();
+                    _isComposing = _messageController.text.trim().isNotEmpty;
                   });
                 },
                 child: const Text('Tout supprimer'),
@@ -431,16 +529,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen> {
                         vertical: 8.0,
                       ),
                     ),
-                    onChanged: (text) {
-                      // Ne mettre à jour l'état que si l'état de composition change réellement
-                      final newIsComposing =
-                          text.trim().isNotEmpty || _selectedFiles.isNotEmpty;
-                      if (_isComposing != newIsComposing) {
-                        setState(() {
-                          _isComposing = newIsComposing;
-                        });
-                      }
-                    },
+                    // Suppression de onChanged ici car nous utilisons un listener sur le contrôleur
                   ),
                 ),
                 const SizedBox(width: 8.0),

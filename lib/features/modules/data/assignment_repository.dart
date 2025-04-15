@@ -72,7 +72,7 @@ class AssignmentRepository {
 
       // Soumettre le devoir
       final response = await _api.post(
-        '/assignment-submissions',
+        '/assignments/submit',
         data: {
           'assignmentId': assignmentId,
           'files': uploadedFilePaths,
@@ -134,7 +134,7 @@ class AssignmentRepository {
             message: 'Erreur lors de la suppression de la soumission');
       }
     } catch (e) {
-      throw AppException(message: 'Erreur lors de la suppression: $e');
+      throw AppException(message: e.toString());
     }
   }
 

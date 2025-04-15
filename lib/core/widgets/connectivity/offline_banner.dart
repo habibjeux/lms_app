@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/connectivity_provider.dart';
 
 class OfflineBanner extends StatelessWidget {
-  const OfflineBanner({Key? key}) : super(key: key);
+  const OfflineBanner({super.key});
 
   @override
   Widget build(BuildContext context) {

@@ -31,13 +31,13 @@ class Discussion {
 
   factory Discussion.fromJson(Map<String, dynamic> json) {
     var messages = <Message>[];
-    print("messages" + messages.toString());
+    print("messages$messages");
     if (json['messages'] != null) {
       messages = (json['messages'] as List)
           .map((msg) => Message.fromJson(msg))
           .toList();
     }
-    print("messages" + messages.toString());
+    print("messages$messages");
 
     return Discussion(
       id: json['id'],

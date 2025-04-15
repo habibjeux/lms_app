@@ -33,13 +33,13 @@ class Message {
 
   factory Message.fromJson(Map<String, dynamic> json) {
     var attachments = <MessageAttachment>[];
-    print("attachments" + attachments.toString());
+    print("attachments$attachments");
     if (json['attachments'] != null) {
       attachments = (json['attachments'] as List)
           .map((attachment) => MessageAttachment.fromJson(attachment))
           .toList();
     }
-    print("attachments" + attachments.toString());
+    print("attachments$attachments");
     return Message(
       id: json['id'],
       content: json['content'] ?? '',

@@ -469,12 +469,12 @@ extension AssignmentExtensions on SyncService {
           final Response response;
           if (submission['existingSubmissionId'] != null) {
             response = await _api.put(
-              '/assignment-submissions/${submission['existingSubmissionId']}',
+              'assignments/submit/${submission['existingSubmissionId']}',
               data: body,
             );
           } else {
             response = await _api.post(
-              '/assignment-submissions',
+              '/assignments/submit',
               data: body,
             );
           }

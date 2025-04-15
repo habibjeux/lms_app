@@ -79,12 +79,10 @@ class ModuleCard extends StatelessWidget {
 class _Chip extends StatelessWidget {
   final IconData icon;
   final String label;
-  final Color? color;
 
   const _Chip({
     required this.icon,
     required this.label,
-    this.color,
   });
 
   @override
@@ -95,7 +93,7 @@ class _Chip extends StatelessWidget {
         vertical: 4,
       ),
       decoration: BoxDecoration(
-        color: (color ?? Colors.grey[600])!.withOpacity(0.1),
+        color: (Colors.grey[600])!.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -104,13 +102,13 @@ class _Chip extends StatelessWidget {
           Icon(
             icon,
             size: 16,
-            color: color ?? Colors.grey[600],
+            color: Colors.grey[600],
           ),
           const SizedBox(width: 4),
           Text(
             label,
             style: TextStyle(
-              color: color ?? Colors.grey[600],
+              color: Colors.grey[600],
               fontSize: 12,
             ),
           ),
