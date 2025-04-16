@@ -67,18 +67,31 @@ class AssignmentRepository {
     bool isLate,
   ) async {
     try {
-      // Upload des fichiers
-      List<String> uploadedFilePaths = await _uploadFiles(files);
+      final formData = FormData();
+      formData.fields.add(MapEntry('assignmentId', assignmentId));
+      if (comment != null) {
+        formData.fields.add(MapEntry('comment', comment));
+      }
+      formData.fields.add(MapEntry('isLate', isLate.toString()));
 
-      // Soumettre le devoir
-      final response = await _api.post(
+      for (var file in files) {
+        final fileName = file.path.split('/').last;
+        final extension = fileName.split('.').last.toLowerCase();
+        final mimeType = _getMimeType(extension);
+
+        formData.files.add(MapEntry(
+          'files',
+          await MultipartFile.fromFile(
+            file.path,
+            filename: fileName,
+            contentType: MediaType.parse(mimeType),
+          ),
+        ));
+      }
+
+      final response = await _apiUpload.post(
         '/assignments/submit',
-        data: {
-          'assignmentId': assignmentId,
-          'files': uploadedFilePaths,
-          'comment': comment,
-          'isLate': isLate,
-        },
+        data: formData,
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -99,18 +112,31 @@ class AssignmentRepository {
     bool isLate,
   ) async {
     try {
-      // Upload des fichiers
-      List<String> uploadedFilePaths = await _uploadFiles(files);
+      final formData = FormData();
+      formData.fields.add(MapEntry('submissionId', submissionId));
+      if (comment != null) {
+        formData.fields.add(MapEntry('comment', comment));
+      }
+      formData.fields.add(MapEntry('isLate', isLate.toString()));
 
-      // Mettre à jour la soumission
+      for (var file in files) {
+        final fileName = file.path.split('/').last;
+        final extension = fileName.split('.').last.toLowerCase();
+        final mimeType = _getMimeType(extension);
+
+        formData.files.add(MapEntry(
+          'files',
+          await MultipartFile.fromFile(
+            file.path,
+            filename: fileName,
+            contentType: MediaType.parse(mimeType),
+          ),
+        ));
+      }
+
       final response = await _api.put(
-        '/assignments/$submissionId/my-submission',
-        data: {
-          'assignmentId': assignmentId,
-          'files': uploadedFilePaths,
-          'comment': comment,
-          'isLate': isLate,
-        },
+        '/assignments/$assignmentId/my-submission',
+        data: formData,
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -124,10 +150,12 @@ class AssignmentRepository {
     }
   }
 
-  Future<void> deleteSubmission(String submissionId) async {
+  Future<void> deleteSubmission(
+      String submissionId, String assignmentId) async {
     try {
-      final response =
-          await _api.delete('/assignments/$submissionId/my-submission');
+      final response = await _api.delete(
+          '/assignments/$assignmentId/my-submission',
+          data: {'submissionId': submissionId});
 
       if (response.statusCode != 200 && response.statusCode != 204) {
         throw AppException(

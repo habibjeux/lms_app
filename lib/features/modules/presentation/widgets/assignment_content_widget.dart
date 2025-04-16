@@ -153,7 +153,7 @@ class AssignmentContentWidget extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          'Taille maximale: ${_formatFileSize(assignment.maxFileSize)}',
+          'Taille maximale: ${_formatFileSize(assignment.maxFileSize * 1024 * 1024)}',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
       ],

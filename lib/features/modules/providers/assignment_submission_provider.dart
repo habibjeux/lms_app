@@ -108,7 +108,7 @@ class AssignmentSubmissionProvider with ChangeNotifier {
       final isOnline = await _syncService.isOnline();
 
       if (isOnline) {
-        await _repository.deleteSubmission(submissionId);
+        await _repository.deleteSubmission(submissionId, assignmentId);
       } else {
         await _repository.markOfflineSubmissionForDeletion(submissionId);
       }

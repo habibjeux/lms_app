@@ -432,52 +432,33 @@ extension AssignmentExtensions on SyncService {
         try {
           // Préparation des fichiers pour l'upload
           List<String> localFilePaths = List<String>.from(submission['files']);
-          List<String> uploadedFilePaths = [];
 
-          // Upload des fichiers
+          // Soumission du devoir
+          final formData = FormData();
           for (String filePath in localFilePaths) {
             final file = File(filePath);
             if (await file.exists()) {
-              final fileName = filePath.split('/').last;
-              final formData = FormData.fromMap({
-                'file':
-                    await MultipartFile.fromFile(file.path, filename: fileName),
-              });
-
-              final response = await _apiUpload.post(
-                '/uploads',
-                data: formData,
+              formData.files.add(
+                MapEntry(
+                  'files[]',
+                  await MultipartFile.fromFile(file.path,
+                      filename: file.path.split('/').last),
+                ),
               );
-
-              if (response.statusCode == 200 || response.statusCode == 201) {
-                uploadedFilePaths.add(response.data['filePath']);
-              } else {
-                throw Exception(
-                    'Erreur lors de l\'upload du fichier $fileName');
-              }
             }
           }
-
-          // Soumission du devoir
-          final body = {
-            'assignmentId': submission['assignmentId'],
-            'files': uploadedFilePaths,
-            'comment': submission['comment'],
-            'isLate': submission['isLate'],
-          };
+          formData.fields
+              .add(MapEntry('assignmentId', submission['assignmentId']));
+          formData.fields.add(MapEntry('comment', submission['comment'] ?? ''));
+          formData.fields
+              .add(MapEntry('isLate', submission['isLate'].toString()));
 
           final Response response;
-          if (submission['existingSubmissionId'] != null) {
-            response = await _api.put(
-              'assignments/submit/${submission['existingSubmissionId']}',
-              data: body,
-            );
-          } else {
-            response = await _api.post(
-              '/assignments/submit',
-              data: body,
-            );
-          }
+
+          response = await _api.post(
+            '/assignments/submit',
+            data: formData,
+          );
 
           if (response.statusCode == 200 || response.statusCode == 201) {
             // Mise à jour du statut de la soumission
