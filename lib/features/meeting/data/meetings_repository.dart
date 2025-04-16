@@ -8,7 +8,7 @@ class MeetingsRepository {
 
   Future<List<CourseSession>> getUpcomingSessions() async {
     try {
-      final response = await _dio.get('/teachers/sessions/upcoming');
+      final response = await _dio.get('/sessions/upcoming');
 
       if (response.data is List) {
         return (response.data as List)
@@ -28,7 +28,7 @@ class MeetingsRepository {
 
   Future<CourseSession?> getActiveSession() async {
     try {
-      final response = await _dio.get('/teachers/sessions/active');
+      final response = await _dio.get('/sessions/active');
 
       if (response.data != null && response.data is Map<String, dynamic>) {
         return CourseSession.fromJson(response.data);
@@ -45,7 +45,7 @@ class MeetingsRepository {
 
   Future<CourseSession> getSessionById(String sessionId) async {
     try {
-      final response = await _dio.get('/teachers/sessions/$sessionId');
+      final response = await _dio.get('/sessions/$sessionId');
       return CourseSession.fromJson(response.data);
     } on DioException catch (e) {
       if (e.error is AppException) {
@@ -58,7 +58,8 @@ class MeetingsRepository {
 
   Future<Map<String, dynamic>> joinSession(String sessionId) async {
     try {
-      final response = await _dio.post('/teachers/sessions/$sessionId/join');
+      final response = await _dio
+          .post('/sessions/$sessionId/join', data: {'platform': 'mobile'});
 
       return {
         'token': response.data['token'],
