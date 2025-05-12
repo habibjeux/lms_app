@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-class ExpandableTextField extends StatefulWidget {
+import '../../providers/expandable_text_field_provider.dart';
+
+class ExpandableTextField extends StatelessWidget {
   final TextEditingController controller;
   final int minLines;
   final int maxLines;
@@ -8,7 +11,9 @@ class ExpandableTextField extends StatefulWidget {
   final Function(String)? onChanged;
   final Function(String)? onSubmitted;
 
-  const ExpandableTextField({
+  final String _textFieldId = UniqueKey().toString();
+
+  ExpandableTextField({
     super.key,
     required this.controller,
     this.minLines = 1,
@@ -16,55 +21,44 @@ class ExpandableTextField extends StatefulWidget {
     this.decoration,
     this.onChanged,
     this.onSubmitted,
-  });
-
-  @override
-  State<ExpandableTextField> createState() => _ExpandableTextFieldState();
-}
-
-class _ExpandableTextFieldState extends State<ExpandableTextField> {
-  late int _currentLines;
-
-  @override
-  void initState() {
-    super.initState();
-    _currentLines = widget.minLines;
-
-    // Écouter les changements dans le controller pour ajuster la hauteur
-    widget.controller.addListener(_updateLines);
+  }) {
+    _setupControllerListener();
   }
 
-  @override
-  void dispose() {
-    widget.controller.removeListener(_updateLines);
-    super.dispose();
-  }
-
-  void _updateLines() {
-    final newLines = '\n'.allMatches(widget.controller.text).length + 1;
-
-    if (newLines != _currentLines) {
-      setState(() {
-        _currentLines = newLines.clamp(widget.minLines, widget.maxLines);
-      });
-    }
+  void _setupControllerListener() {
+    controller.addListener(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
-      controller: widget.controller,
-      minLines: _currentLines,
-      maxLines: widget.maxLines,
-      decoration: widget.decoration,
-      textCapitalization: TextCapitalization.sentences,
-      keyboardType: TextInputType.multiline,
-      textInputAction: TextInputAction.newline,
-      onChanged: (text) {
-        _updateLines();
-        widget.onChanged?.call(text);
+    final provider =
+        Provider.of<ExpandableTextFieldProvider>(context, listen: false);
+
+    provider.updateLines(_textFieldId, controller.text, minLines, maxLines);
+
+    return Consumer<ExpandableTextFieldProvider>(
+      builder: (context, textFieldProvider, _) {
+        final currentLines =
+            textFieldProvider.getCurrentLines(_textFieldId, minLines, maxLines);
+
+        return TextField(
+          controller: controller,
+          minLines: currentLines,
+          maxLines: maxLines,
+          decoration: decoration,
+          textCapitalization: TextCapitalization.sentences,
+          keyboardType: TextInputType.multiline,
+          textInputAction: TextInputAction.newline,
+          onChanged: (text) {
+            textFieldProvider.updateLines(
+                _textFieldId, text, minLines, maxLines);
+            if (onChanged != null) {
+              onChanged!(text);
+            }
+          },
+          onSubmitted: onSubmitted,
+        );
       },
-      onSubmitted: widget.onSubmitted,
     );
   }
 }

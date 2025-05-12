@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:lms_app/features/meeting/presentation/screens/meeting_screen_wrapper.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../providers/meetings_provider.dart';
-import 'meeting_screen.dart';
 
 class SessionsListScreen extends StatefulWidget {
   const SessionsListScreen({super.key});
@@ -214,7 +214,8 @@ class SessionsListScreenState extends State<SessionsListScreen>
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const MeetingScreen(),
+                              builder: (context) =>
+                                  const MeetingScreenWrapper(),
                             ),
                           );
                         }

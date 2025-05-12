@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../../core/services/sync_service.dart';
 import '../../../../core/providers/connectivity_provider.dart';
 import '../../../../core/widgets/buttons/download_button.dart';
 import '../../models/module.dart';
-import '../../models/chapter.dart';
-import '../../models/activity.dart';
+import '../../providers/modules_provider.dart';
 import '../widgets/chapter_widget.dart';
 import '../widgets/module_activity.dart';
 
@@ -20,18 +18,14 @@ class ModuleDetailScreen extends StatefulWidget {
 
 class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
   final ScrollController _scrollController = ScrollController();
-  final SyncService _syncService = SyncService();
-  late Future<List<Chapter>> _chaptersFuture;
-  List<Chapter> _visibleChapters = [];
-  bool _isSyncing = false;
-  final Map<String, List<Activity>> _chapterActivities = {};
-  final Map<String, bool> _expandedChapters = {};
-  List<Activity> _moduleActivities = [];
 
   @override
   void initState() {
     super.initState();
-    _initializeChapters();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final provider = Provider.of<ModulesProvider>(context, listen: false);
+      provider.setCurrentModule(widget.module);
+    });
   }
 
   @override
@@ -40,176 +34,51 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
     super.dispose();
   }
 
-  void _initializeChapters() {
-    _chaptersFuture = _loadChapters();
-    _chaptersFuture.then((chapters) {
-      for (var chapter in chapters) {
-        _loadActivitiesForChapter(chapter);
-        if (_expandedChapters.isEmpty) {
-          _expandedChapters[chapter.id] = true;
-        } else {
-          _expandedChapters[chapter.id] = false;
-        }
-      }
-      _loadModuleActivities();
-    });
-  }
-
-  Future<List<Chapter>> _loadChapters() async {
-    try {
-      final chaptersData = await _syncService.getChapters(widget.module.id);
-      return _processChaptersData(chaptersData);
-    } catch (e) {
-      try {
-        final cachedChapters = await _syncService.getChapters(widget.module.id);
-        return _processChaptersData(cachedChapters);
-      } catch (cacheError) {
-        throw Exception('Impossible de charger les chapitres: $cacheError');
-      }
-    }
-  }
-
-  List<Chapter> _processChaptersData(List<Map<String, dynamic>> chaptersData) {
-    final chapters = chaptersData
-        .map((data) => Chapter.fromJson(data))
-        .where((c) => c.visible)
-        .toList()
-      ..sort((a, b) => a.order.compareTo(b.order));
-
-    if (mounted) {
-      setState(() {
-        _visibleChapters = chapters;
-      });
-    }
-    return chapters;
-  }
-
-  Future<void> _loadActivitiesForChapter(Chapter chapter) async {
-    try {
-      final activitiesData =
-          await _syncService.getChapterActivities(chapter.id);
-      final activities = activitiesData
-          .map((data) => Activity.fromJson(data))
-          .where((activity) => activity.visible)
-          .toList()
-        ..sort((a, b) => a.order.compareTo(b.order));
-
-      if (mounted) {
-        setState(() {
-          _chapterActivities[chapter.id] = activities;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur de chargement des activités: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _loadModuleActivities() async {
-    try {
-      final activitiesData =
-          await _syncService.getModuleActivities(widget.module.id);
-      final activities = activitiesData
-          .map((data) => Activity.fromJson(data))
-          .where((activity) => activity.visible)
-          .toList()
-        ..sort((a, b) => a.order.compareTo(b.order));
-
-      if (mounted) {
-        setState(() {
-          _moduleActivities = activities;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content:
-                  Text('Erreur de chargement des activités du module: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _refreshContent() async {
-    if (_isSyncing) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Synchronisation déjà en cours...')),
-      );
-      return;
-    }
-
-    setState(() {
-      _isSyncing = true;
-    });
+  Future<void> _handleRefresh() async {
+    final provider = Provider.of<ModulesProvider>(context, listen: false);
 
     try {
-      await _syncService.smartSync(
-        moduleId: widget.module.id,
-        onProgress: (progress) {
-          // Optionnel: Ajouter un indicateur de progression
-        },
-        onError: (error) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Erreur: $error')),
-            );
-          }
-        },
-      );
-
-      _initializeChapters();
-      _chapterActivities.clear();
-      _moduleActivities.clear();
-
-      if (mounted) {
+      await provider.refreshModuleContent();
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Contenu mis à jour avec succès')),
         );
       }
     } catch (e) {
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur de synchronisation: $e')),
+          SnackBar(content: Text('$e')),
         );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSyncing = false;
-        });
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isOnline =
-        Provider.of<ConnectivityProvider>(context, listen: false).isOnline;
+    return Consumer2<ModulesProvider, ConnectivityProvider>(
+      builder: (context, modulesProvider, connectivityProvider, _) {
+        final isOnline = connectivityProvider.isOnline;
 
-    return Consumer<ConnectivityProvider>(
-      builder: (context, connectivity, child) {
         return Scaffold(
-          body: FutureBuilder<List<Chapter>>(
-            future: _chaptersFuture,
+          body: FutureBuilder<List<dynamic>>(
+            future: modulesProvider.chaptersFuture,
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
+              if (snapshot.connectionState == ConnectionState.waiting ||
+                  modulesProvider.isLoading) {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              if (snapshot.hasError) {
+              if (snapshot.hasError || modulesProvider.error != null) {
                 return Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text('Erreur: ${snapshot.error}'),
-                      if (connectivity.isOnline) ...[
+                      Text(
+                          'Erreur: ${snapshot.error ?? modulesProvider.error}'),
+                      if (connectivityProvider.isOnline) ...[
                         const SizedBox(height: 16),
                         ElevatedButton(
-                          onPressed: _refreshContent,
+                          onPressed: _handleRefresh,
                           child: const Text('Réessayer'),
                         ),
                       ],
@@ -218,22 +87,23 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
                 );
               }
 
-              if (_visibleChapters.isEmpty && _moduleActivities.isEmpty) {
+              if (modulesProvider.visibleChapters.isEmpty &&
+                  modulesProvider.moduleActivities.isEmpty) {
                 return const Center(
                   child: Text('Aucun contenu disponible'),
                 );
               }
 
               return RefreshIndicator(
-                onRefresh: _refreshContent,
+                onRefresh: () => _handleRefresh(),
                 child: CustomScrollView(
                   controller: _scrollController,
                   slivers: [
                     SliverAppBar(
-                      title: Text(widget.module.title),
+                      title: Text(modulesProvider.currentModule?.title ?? ''),
                       floating: true,
                       actions: [
-                        if (_isSyncing)
+                        if (modulesProvider.isSyncing)
                           const Padding(
                             padding: EdgeInsets.all(8.0),
                             child: SizedBox(
@@ -242,9 +112,9 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             ),
                           ),
-                        if (isOnline)
+                        if (isOnline && modulesProvider.currentModule != null)
                           DownloadButton(
-                            moduleId: widget.module.id,
+                            moduleId: modulesProvider.currentModule!.id,
                             onComplete: () {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
@@ -255,20 +125,24 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
                           ),
                       ],
                     ),
-                    if (_visibleChapters.isNotEmpty)
+                    if (modulesProvider.visibleChapters.isNotEmpty)
                       SliverPadding(
                         padding:
                             const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
                         sliver: SliverList(
                           delegate: SliverChildBuilderDelegate(
                             (context, index) {
-                              final chapter = _visibleChapters[index];
-                              final isExpanded =
-                                  _expandedChapters[chapter.id] ?? false;
-                              final activities =
-                                  _chapterActivities[chapter.id] ?? [];
-                              final isLoading =
-                                  !_chapterActivities.containsKey(chapter.id);
+                              final chapter =
+                                  modulesProvider.visibleChapters[index];
+                              final isExpanded = modulesProvider
+                                      .expandedChapters[chapter.id] ??
+                                  false;
+                              final activities = modulesProvider
+                                      .chapterActivities[chapter.id] ??
+                                  [];
+                              final isLoading = !modulesProvider
+                                  .chapterActivities
+                                  .containsKey(chapter.id);
 
                               return ChapterAccordion(
                                 chapter: chapter,
@@ -276,24 +150,23 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
                                 isExpanded: isExpanded,
                                 isLoading: isLoading,
                                 onExpandChanged: (expanded) {
-                                  setState(() {
-                                    _expandedChapters[chapter.id] = expanded;
-                                  });
+                                  modulesProvider
+                                      .toggleChapterExpansion(chapter.id);
                                 },
                               );
                             },
-                            childCount: _visibleChapters.length,
+                            childCount: modulesProvider.visibleChapters.length,
                           ),
                         ),
                       ),
-                    // Affichage des activités du module même sans chapitres
-                    if (_moduleActivities.isNotEmpty)
+                    if (modulesProvider.moduleActivities.isNotEmpty &&
+                        modulesProvider.currentModule != null)
                       SliverToBoxAdapter(
                         child: ModuleActivitiesSection(
-                          activities: _moduleActivities,
-                          moduleId: widget.module.id,
-                          isLoading: _chapterActivities.length <
-                              _visibleChapters.length,
+                          activities: modulesProvider.moduleActivities,
+                          moduleId: modulesProvider.currentModule!.id,
+                          isLoading: modulesProvider.chapterActivities.length <
+                              modulesProvider.visibleChapters.length,
                         ),
                       ),
                     SliverToBoxAdapter(
