@@ -104,10 +104,10 @@ class AssignmentGrade extends BaseModel {
       active: json['active'] ?? true,
       submissionId: json['submissionId'],
       teacherId: json['teacherId'],
-      score: json['score'] is int ? json['score'].toDouble() : json['score'],
+      score: _parseScore(json['score']),
       feedback: json['feedback'],
-      gradedAt: json['gradedAt'] != null
-          ? DateTime.parse(json['gradedAt'])
+      gradedAt: json['gradedDate'] != null
+          ? DateTime.parse(json['gradedDate'])
           : DateTime.now(),
     );
   }
@@ -123,5 +123,15 @@ class AssignmentGrade extends BaseModel {
       'feedback': feedback,
       'gradedAt': gradedAt.toIso8601String(),
     };
+  }
+
+  static double _parseScore(dynamic score) {
+    if (score == null) return 0.0;
+    if (score is double) return score;
+    if (score is int) return score.toDouble();
+    if (score is String) {
+      return double.tryParse(score) ?? 0.0;
+    }
+    return 0.0;
   }
 }

@@ -100,10 +100,7 @@ class ActivityDetailScreen extends StatelessWidget {
                     Text('Type: ${resource.mimeType}'),
                   ],
                   const SizedBox(height: 16),
-                  if (resource.offlineAvailable && isOffline)
-                    _buildOpenButton(context, resource)
-                  else if (!isOffline)
-                    _buildOnlineButton(context, resource),
+                  _buildOpenButton(context, resource)
                 ],
               ),
             ),

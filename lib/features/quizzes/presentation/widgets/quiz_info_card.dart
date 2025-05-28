@@ -1,6 +1,4 @@
-// lib/features/quizzes/presentation/widgets/quiz_info_card.dart
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../../models/quiz.dart';
 import 'quiz_availability_badge.dart';
 
@@ -14,8 +12,6 @@ class QuizInfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dateFormat = DateFormat('dd/MM/yyyy HH:mm');
-
     return Card(
       elevation: 2,
       child: Padding(
@@ -50,7 +46,7 @@ class QuizInfoCard extends StatelessWidget {
                       children: [
                         if (quiz.startDate != null)
                           Text(
-                            'Début: ${dateFormat.format(quiz.startDate!)}',
+                            'Début: ${_formatDateTime(quiz.startDate!)}',
                             style: TextStyle(
                               color: Colors.grey[700],
                               fontSize: 14,
@@ -58,7 +54,7 @@ class QuizInfoCard extends StatelessWidget {
                           ),
                         if (quiz.endDate != null)
                           Text(
-                            'Fin: ${dateFormat.format(quiz.endDate!)}',
+                            'Fin: ${_formatDateTime(quiz.endDate!)}',
                             style: TextStyle(
                               color: Colors.grey[700],
                               fontSize: 14,
@@ -117,5 +113,9 @@ class QuizInfoCard extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  String _formatDateTime(DateTime date) {
+    return '${date.day}/${date.month}/${date.year} à ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
   }
 }

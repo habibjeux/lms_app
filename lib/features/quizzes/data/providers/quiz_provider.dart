@@ -51,13 +51,12 @@ class QuizProvider with ChangeNotifier {
   }
 
   // Méthodes pour le chargement des données
-  Future<void> loadQuiz(String quizId, {bool forceRefresh = false}) async {
+  Future<void> loadQuiz(String quizId) async {
     _setLoading(true);
     _clearError();
 
     try {
-      _currentQuiz =
-          await _repository.getQuiz(quizId, forceRefresh: forceRefresh);
+      _currentQuiz = await _repository.getQuiz(quizId);
       _isDownloaded = await _repository.isQuizDownloaded(quizId);
       notifyListeners();
     } on AppException catch (e) {

@@ -15,22 +15,20 @@ class QuizRepository {
   String _getQuizAttemptsKey(String quizId) => 'quiz_attempts_$quizId';
   String _getPendingSubmissionsKey() => 'quiz_pending_submissions';
 
-  Future<Quiz> getQuiz(String quizId, {bool forceRefresh = false}) async {
+  Future<Quiz> getQuiz(String quizId) async {
     try {
       // Si pas de forceRefresh, essayer d'abord le cache
-      if (!forceRefresh) {
-        final cachedQuiz = await _getCachedQuiz(quizId);
-        if (cachedQuiz != null) {
-          return cachedQuiz;
-        }
-      }
+      /*final cachedQuiz = await _getCachedQuiz(quizId);
+      if (cachedQuiz != null) {
+        return cachedQuiz;
+      }*/
 
       final response = await _dio.get('/activities/$quizId');
       print("Quiz.response: ${response.data}");
       final quiz = Quiz.fromJson(response.data);
       print("here: $quiz");
 
-      await _cacheQuiz(quiz);
+      //await _cacheQuiz(quiz);
 
       return quiz;
     } on DioException catch (e) {
@@ -361,7 +359,7 @@ class QuizRepository {
   // Télécharger un quiz pour une utilisation hors ligne
   Future<Quiz> downloadQuizForOffline(String quizId) async {
     try {
-      final quiz = await getQuiz(quizId, forceRefresh: true);
+      final quiz = await getQuiz(quizId);
 
       // Marquer comme téléchargé
       final downloadedQuiz = quiz.copyWith(isDownloaded: true);

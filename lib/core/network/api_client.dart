@@ -6,6 +6,7 @@ class ApiClient {
   static Dio? _dio;
   static Dio? _uploadDio;
   static Dio? _apiUploadDio;
+  static Dio? _downloadDio;
 
   static void setAuthToken(String token) {
     final authHeader = 'Bearer $token';
@@ -31,6 +32,30 @@ class ApiClient {
   static Dio get uploadInstance {
     _uploadDio ??= _createUploadDio();
     return _uploadDio!;
+  }
+
+  static Dio get downloadInstance {
+    _downloadDio ??= Dio(
+      BaseOptions(
+        baseUrl: baseUrl + '/public',
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 30),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      ),
+    );
+
+    _downloadDio!.interceptors.addAll([
+      ApiInterceptor(),
+      LogInterceptor(
+        requestBody: true,
+        responseBody: true,
+      ),
+    ]);
+
+    return _downloadDio!;
   }
 
   static Dio get apiUploadInstance {

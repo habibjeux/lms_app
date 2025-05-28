@@ -20,10 +20,16 @@ class ModulesRepository {
       }
 
       final response = await _dio.get('/students/modules');
+      print('Response: ${response.data}');
+      final responseData = response.data['data'] as List;
 
-      final List<Module> modules =
-          (response.data as List).map((json) => Module.fromJson(json)).toList();
+      // Maintenant, vous devez extraire le module de chaque élément
+      final List<Module> modules = responseData
+          .map(
+              (item) => Module.fromJson(item['module'] as Map<String, dynamic>))
+          .toList();
 
+      print('Modules: $modules');
       // Mettre en cache
       await _cacheModules(modules);
 
@@ -40,6 +46,7 @@ class ModulesRepository {
       if (e.error is AppException) {
         throw e.error as AppException;
       }
+      print('Erreur lors du chargement des modules: ${e.message}');
       throw AppException(message: 'Erreur lors du chargement des modules');
     }
   }

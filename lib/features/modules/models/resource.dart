@@ -8,8 +8,9 @@ class Resource extends Activity {
   final String url;
   final int? fileSize;
   final String? mimeType;
-  final bool downloadable;
-  final bool offlineAvailable;
+  final String? compressedUrl;
+  final int? compressedSize;
+  final String compressionStatus;
 
   Resource({
     required super.id,
@@ -29,8 +30,9 @@ class Resource extends Activity {
     required this.url,
     this.fileSize,
     this.mimeType,
-    required this.downloadable,
-    required this.offlineAvailable,
+    this.compressedUrl,
+    this.compressedSize,
+    required this.compressionStatus,
   }) : super(type: ActivityType.RESOURCE);
 
   factory Resource.fromJson(Map<String, dynamic> json) {
@@ -58,8 +60,9 @@ class Resource extends Activity {
       url: json['url'],
       fileSize: json['fileSize'],
       mimeType: json['mimeType'],
-      downloadable: json['downloadable'],
-      offlineAvailable: json['offlineAvailable'],
+      compressedUrl: json['compressedUrl'],
+      compressedSize: json['compressedSize'],
+      compressionStatus: json['compressionStatus'] ?? 'FAILED',
     );
   }
 
@@ -71,8 +74,9 @@ class Resource extends Activity {
       'url': url,
       'fileSize': fileSize,
       'mimeType': mimeType,
-      'downloadable': downloadable,
-      'offlineAvailable': offlineAvailable,
+      'compressedUrl': compressedUrl,
+      'compressedSize': compressedSize,
+      'compressionStatus': compressionStatus,
     };
   }
 }

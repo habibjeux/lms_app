@@ -31,8 +31,6 @@ class ActivityProvider with ChangeNotifier {
   }
 
   Future<void> downloadResource(Resource resource) async {
-    if (!resource.downloadable || _isDownloading[resource.id] == true) return;
-
     _isDownloading[resource.id] = true;
     _downloadProgress[resource.id] = 0.0;
     notifyListeners();

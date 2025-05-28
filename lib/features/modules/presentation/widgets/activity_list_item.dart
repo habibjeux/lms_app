@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../../core/helper/DateHelper.dart';
 import '../../../../core/providers/connectivity_provider.dart';
 import '../../../quizzes/data/providers/quiz_provider.dart';
 import '../../models/activity.dart';
@@ -48,8 +49,8 @@ class ActivityListItem extends StatelessWidget {
           subtitle: activity.startDate != null || activity.endDate != null
               ? Text(
                   activity.endDate != null
-                      ? 'Se termine ${_getFormattedDate(activity.endDate)}'
-                      : 'Commence ${_getFormattedDate(activity.startDate)}',
+                      ? _getFormattedDate(activity.endDate, isEndDate: true)
+                      : _getFormattedDate(activity.startDate, isEndDate: false),
                 )
               : null,
           trailing: Row(
@@ -85,8 +86,6 @@ class ActivityListItem extends StatelessWidget {
       ConnectivityProvider connectivityProvider) {
     if (activity is Resource) {
       final resource = activity as Resource;
-      if (!resource.downloadable) return const SizedBox.shrink();
-
       if (provider.isDownloading(activity.id)) {
         return SizedBox(
           width: 20,
@@ -289,9 +288,8 @@ class ActivityListItem extends StatelessWidget {
     }
   }
 
-  String _getFormattedDate(DateTime? date) {
-    if (date == null) return '';
-    return timeago.format(date, locale: 'fr');
+  String _getFormattedDate(DateTime? date, {bool isEndDate = false}) {
+    return DateHelper.getFormattedActivityDate(date, isEndDate: isEndDate);
   }
 
   Widget _buildActivityIcon() {

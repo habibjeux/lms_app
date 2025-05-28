@@ -74,7 +74,7 @@ class SyncService {
       for (var activityData in activities) {
         final activity = Activity.fromJson(activityData);
 
-        if (activity is Resource && activity.downloadable) {
+        if (activity is Resource) {
           try {
             await downloadResource(
               activity,
@@ -101,8 +101,6 @@ class SyncService {
     void Function(double)? individualProgress,
     bool isPartOfSync = false,
   }) async {
-    if (!resource.downloadable) return;
-
     try {
       final localPath = await _localPath;
       final fileName = resource.url.split('/').last;
@@ -114,7 +112,7 @@ class SyncService {
       }
 
       final response = await _apiUpload.get(
-        resource.url,
+        resource.compressedUrl ?? resource.url,
         options: Options(
           responseType: ResponseType.bytes,
           followRedirects: true,
@@ -135,10 +133,6 @@ class SyncService {
   }
 
   Future<String?> getLocalResourcePath(Resource resource) async {
-    if (!resource.downloadable || !await isResourceDownloaded(resource.id)) {
-      return null;
-    }
-
     try {
       final localPath = await _localPath;
       final fileName = resource.url.split('/').last;

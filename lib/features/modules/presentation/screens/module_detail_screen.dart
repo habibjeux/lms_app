@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/providers/connectivity_provider.dart';
 import '../../../../core/widgets/buttons/download_button.dart';
+import '../../../../core/widgets/loading_indicator.dart';
 import '../../models/module.dart';
 import '../../providers/modules_provider.dart';
 import '../widgets/chapter_widget.dart';
@@ -87,7 +88,9 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
                 );
               }
 
-              if (modulesProvider.visibleChapters.isEmpty &&
+              if (modulesProvider.isLoading) {
+                const LoadingIndicator();
+              } else if (modulesProvider.visibleChapters.isEmpty &&
                   modulesProvider.moduleActivities.isEmpty) {
                 return const Center(
                   child: Text('Aucun contenu disponible'),

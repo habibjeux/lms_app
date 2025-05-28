@@ -1,12 +1,15 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'dart:io';
+import 'package:path/path.dart' as path;
 
+import '../../../../core/helper/ResourceViewerHelper.dart';
 import '../../../../core/providers/connectivity_provider.dart';
 import '../../../../core/services/sync_service.dart';
-import '../../../../core/utlils/file_helper.dart';
 import '../../models/assignment.dart';
 import '../../models/assignment_attachment.dart';
 import '../../models/assignment_submission.dart';
@@ -20,6 +23,10 @@ class AssignmentContentWidget extends StatelessWidget {
     super.key,
     required this.assignment,
   });
+
+  static String get baseUrl {
+    return '${dotenv.env['SERVER_URL']}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -178,29 +185,47 @@ class AssignmentContentWidget extends StatelessWidget {
                 leading: _getFileIcon(attachment.mimeType),
                 title: Text(attachment.filename),
                 subtitle: Text(_formatFileSize(attachment.fileSize)),
-                trailing: isDownloaded
-                    ? IconButton(
-                        icon: const Icon(Icons.folder_open),
-                        onPressed: () => _openAttachment(context, attachment),
-                      )
-                    : (isOffline
-                        ? const Icon(Icons.cloud_off, color: Colors.grey)
-                        : IconButton(
-                            icon: const Icon(Icons.download),
-                            onPressed: () async {
-                              await _downloadAttachment(context, attachment);
-                              // Rafraîchir la liste
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content:
-                                        Text('Document téléchargé avec succès'),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
-                              }
-                            },
-                          )),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Bouton d'aperçu en ligne (si pas en mode offline)
+                    if (!isOffline)
+                      IconButton(
+                        icon: const Icon(Icons.visibility, color: Colors.blue),
+                        tooltip: 'Aperçu en ligne',
+                        onPressed: () =>
+                            _openAttachmentFromUrl(context, attachment),
+                      ),
+                    // Bouton principal (ouvrir local ou télécharger)
+                    isDownloaded
+                        ? IconButton(
+                            icon: const Icon(Icons.folder_open),
+                            tooltip: 'Ouvrir (local)',
+                            onPressed: () =>
+                                _openAttachment(context, attachment),
+                          )
+                        : (isOffline
+                            ? const Icon(Icons.cloud_off, color: Colors.grey)
+                            : IconButton(
+                                icon: const Icon(Icons.download),
+                                tooltip: 'Télécharger',
+                                onPressed: () async {
+                                  await _downloadAttachment(
+                                      context, attachment);
+                                  // Rafraîchir la liste
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                            'Document téléchargé avec succès'),
+                                        backgroundColor: Colors.green,
+                                      ),
+                                    );
+                                  }
+                                },
+                              )),
+                  ],
+                ),
               );
             },
           );
@@ -403,18 +428,76 @@ class AssignmentContentWidget extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       itemCount: submission.files.length,
       itemBuilder: (context, index) {
-        final fileName = submission.files[index].split('/').last;
+        final filePath = submission.files[index];
+        final fileName = filePath.split('/').last;
+        final resourceType = ResourceViewerHelper.getResourceType(fileName);
+
         return ListTile(
-          leading: const Icon(Icons.insert_drive_file),
+          leading: _getSubmittedFileIcon(resourceType, fileName),
           title: Text(fileName),
-          trailing: IconButton(
-            icon: const Icon(Icons.remove_red_eye),
-            onPressed: () =>
-                _viewSubmittedFile(context, submission.files[index]),
+          subtitle: _getFileTypeDescription(resourceType),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Bouton pour télécharger/sauvegarder
+              IconButton(
+                icon: const Icon(Icons.download, color: Colors.green),
+                tooltip: 'Télécharger',
+                onPressed: () =>
+                    _downloadSubmittedFile(context, filePath, fileName),
+              ),
+              // Bouton pour voir le fichier
+              IconButton(
+                icon: const Icon(Icons.remove_red_eye, color: Colors.blue),
+                tooltip: 'Ouvrir',
+                onPressed: () =>
+                    _viewSubmittedFile(context, filePath, fileName),
+              ),
+            ],
           ),
         );
       },
     );
+  }
+
+  Text? _getFileTypeDescription(ResourceType resourceType) {
+    String description;
+    switch (resourceType) {
+      case ResourceType.pdf:
+        description = 'Document PDF';
+        break;
+      case ResourceType.image:
+        description = 'Image';
+        break;
+      case ResourceType.video:
+        description = 'Vidéo';
+        break;
+      case ResourceType.document:
+        description = 'Document Word';
+        break;
+      default:
+        description = 'Fichier';
+    }
+
+    return Text(
+      description,
+      style: const TextStyle(fontSize: 12, color: Colors.grey),
+    );
+  }
+
+  Widget _getSubmittedFileIcon(ResourceType resourceType, String fileName) {
+    switch (resourceType) {
+      case ResourceType.pdf:
+        return const Icon(Icons.picture_as_pdf, color: Colors.red);
+      case ResourceType.image:
+        return const Icon(Icons.image, color: Colors.blue);
+      case ResourceType.video:
+        return const Icon(Icons.video_library, color: Colors.purple);
+      case ResourceType.document:
+        return const Icon(Icons.description, color: Colors.orange);
+      default:
+        return const Icon(Icons.insert_drive_file, color: Colors.grey);
+    }
   }
 
   Future<void> _showSubmissionDialog(
@@ -693,7 +776,15 @@ class AssignmentContentWidget extends StatelessWidget {
         final exists = await file.exists();
         print('Le fichier existe: $exists');
 
-        await FileHelper.openResource(localPath, null, attachment.mimeType);
+        if (exists) {
+          await ResourceViewerHelper.openResource(
+            context: context,
+            resourcePath: localPath,
+            title: attachment.filename,
+          );
+        } else {
+          throw Exception('Le fichier local n\'existe pas');
+        }
       } else {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -717,23 +808,44 @@ class AssignmentContentWidget extends StatelessWidget {
     }
   }
 
-  Future<void> _viewSubmittedFile(BuildContext context, String filePath) async {
+  Future<void> _openAttachmentFromUrl(
+      BuildContext context, AssignmentAttachment attachment) async {
     try {
-      final isLocal = filePath.startsWith('/');
-      if (isLocal) {
-        // Fichier local
-        final file = File(filePath);
-        if (await file.exists()) {
-          await FileHelper.openResource(filePath, null, '');
-          return;
-        }
-      }
+      final attachmentUrl = '$baseUrl${attachment.url}';
 
-      // Fichier distant
+      await ResourceViewerHelper.openResource(
+        context: context,
+        resourcePath: attachmentUrl,
+        title: attachment.filename,
+      );
+    } catch (e) {
+      print('Erreur lors de l\'ouverture depuis l\'URL: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors de l\'ouverture du document: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // Version corrigée comme pour les documents associés
+  Future<void> _viewSubmittedFile(
+      BuildContext context, String filePath, String fileName) async {
+    try {
+      // Traiter TOUS les fichiers soumis comme des fichiers serveur
+      // car ils viennent du serveur via l'API
       if (await _syncService.isOnline()) {
         final serverUrl = dotenv.env['SERVER_URL'] ?? '';
-        final resourceUrl = '$serverUrl/$filePath';
-        await FileHelper.openResource(null, resourceUrl, '');
+        final resourceUrl = '$serverUrl$filePath';
+
+        await ResourceViewerHelper.openResource(
+          context: context,
+          resourcePath: resourceUrl,
+          title: fileName,
+        );
       } else {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -745,11 +857,102 @@ class AssignmentContentWidget extends StatelessWidget {
         }
       }
     } catch (e) {
+      print('Erreur lors de l\'ouverture du fichier soumis: $e');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Erreur lors de l\'ouverture du fichier: $e'),
             backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _downloadSubmittedFile(
+      BuildContext context, String filePath, String fileName) async {
+    try {
+      if (!await _syncService.isOnline()) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Connexion Internet requise pour télécharger'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      // Afficher le dialogue de progression
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Téléchargement...'),
+            ],
+          ),
+        ),
+      );
+
+      final serverUrl = dotenv.env['SERVER_URL'] ?? '';
+      final resourceUrl = '$serverUrl$filePath';
+
+      // Obtenir le répertoire de téléchargement
+      final directory = await getApplicationDocumentsDirectory();
+      final sanitizedFileName = fileName.replaceAll(RegExp(r'[^\w\s.-]'), '_');
+      final localFileName =
+          '${sanitizedFileName}_${DateTime.now().millisecondsSinceEpoch}${path.extension(fileName)}';
+      final localFilePath = path.join(directory.path, localFileName);
+
+      // Télécharger le fichier avec gestion du progrès
+      final dio = Dio();
+      await dio.download(
+        resourceUrl,
+        localFilePath,
+        onReceiveProgress: (received, total) {
+          if (total != -1) {
+            final progress = (received / total * 100).toStringAsFixed(0);
+            print('Progression du téléchargement: $progress%');
+          }
+        },
+      );
+
+      // Fermer le dialogue de progression
+      Navigator.pop(context);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fichier téléchargé: $localFileName'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'Ouvrir',
+              onPressed: () => ResourceViewerHelper.openResource(
+                context: context,
+                resourcePath: localFilePath,
+                title: fileName,
+              ),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      // Fermer le dialogue de progression si ouvert
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+
+      print('Erreur lors du téléchargement: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors du téléchargement: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
           ),
         );
       }

@@ -41,12 +41,6 @@ class _QuizDetailScreenState extends State<QuizDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Quiz'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadQuizData,
-          ),
-        ],
       ),
       body: Consumer<QuizProvider>(
         builder: (context, provider, _) {
@@ -77,12 +71,21 @@ class _QuizDetailScreenState extends State<QuizDetailScreen> {
 
                   // Bouton de téléchargement pour mode hors ligne
                   DownloadQuizButton(quizId: quiz.id),
-                  const SizedBox(height: 16),
-
                   // Bouton pour commencer le quiz
-                  if (quiz.isAvailable)
+                  if (quiz.isAvailable &&
+                      quiz.maxAttempts < provider.attempts.length)
                     _buildStartQuizButton(context, provider, quiz),
                   const SizedBox(height: 24),
+                  if (quiz.maxAttempts > 0 &&
+                      provider.attempts.length >= quiz.maxAttempts)
+                    const Text(
+                      'Vous avez atteint le nombre maximum de tentatives.',
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  const SizedBox(height: 16),
 
                   // Historique des tentatives
                   const Text(

@@ -44,6 +44,7 @@ class ModulesProvider with ChangeNotifier {
     } on AppException catch (e) {
       _setError(e.toString());
     } catch (e) {
+      print('Erreur lors du chargement des modules: $e');
       _setError('Une erreur est survenue lors du chargement des modules');
     } finally {
       _setLoading(false);
@@ -112,6 +113,7 @@ class ModulesProvider with ChangeNotifier {
       throw AppException(message: 'Aucun module sélectionné');
     }
 
+    _setLoading(true);
     try {
       final chaptersData = await _syncService.getChapters(_currentModule!.id);
       return _processChaptersData(chaptersData);
@@ -124,6 +126,8 @@ class ModulesProvider with ChangeNotifier {
         throw AppException(
             message: 'Impossible de charger les chapitres: $cacheError');
       }
+    } finally {
+      _setLoading(false);
     }
   }
 
@@ -161,6 +165,8 @@ class ModulesProvider with ChangeNotifier {
   Future<void> _loadModuleActivities() async {
     if (_currentModule == null) return;
 
+    _setLoading(true);
+
     try {
       final activitiesData =
           await _syncService.getModuleActivities(_currentModule!.id);
@@ -175,6 +181,8 @@ class ModulesProvider with ChangeNotifier {
     } catch (e) {
       _moduleActivities = [];
       notifyListeners();
+    } finally {
+      _setLoading(false);
     }
   }
 
