@@ -1,12 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../../../../core/services/download_storage_service.dart';
-import '../../../../core/services/sync_service.dart';
-import '../../../../core/providers/connectivity_provider.dart';
-import '../../models/resource.dart';
-import '../../models/activity.dart';
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
+import '../../../../core/services/storage_service.dart';
+import '../../../../core/widgets/loading_indicator.dart';
 
 class DownloadsScreen extends StatefulWidget {
   const DownloadsScreen({super.key});
@@ -16,8 +11,11 @@ class DownloadsScreen extends StatefulWidget {
 }
 
 class _DownloadsScreenState extends State<DownloadsScreen> {
-  Map<String, Map<String, dynamic>> _downloadedItems = {};
+  final DownloadStorageService _downloadStorage = DownloadStorageService();
+  final StorageService _storage = StorageService();
   bool _isLoading = true;
+  Map<String, Map<String, dynamic>> _downloadedItems = {};
+  bool _isDeleting = false;
 
   @override
   void initState() {
@@ -26,10 +24,9 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   }
 
   Future<void> _loadDownloadedItems() async {
-    setState(() => _isLoading = true);
     try {
-      final items =
-          await context.read<DownloadStorageService>().getDownloadedItems();
+      setState(() => _isLoading = true);
+      final items = await _downloadStorage.getDownloadedItems();
       setState(() {
         _downloadedItems = items;
         _isLoading = false;
@@ -37,55 +34,70 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     } catch (e) {
       print('Erreur lors du chargement des téléchargements: $e');
       setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors du chargement des téléchargements: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   Future<void> _deleteItem(String id, String type) async {
     try {
-      await context.read<DownloadStorageService>().deleteItem(id, type);
+      setState(() => _isDeleting = true);
+      await _downloadStorage.deleteItem(id, type);
       await _loadDownloadedItems();
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur lors de la suppression: $e')),
-      );
-    }
-  }
-
-  Future<void> _deleteAllDownloads() async {
-    try {
-      await context.read<DownloadStorageService>().clearAllDownloads();
-      await _loadDownloadedItems();
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur lors de la suppression: $e')),
-      );
-    }
-  }
-
-  void _navigateToItem(String id, Map<String, dynamic> data) {
-    final type = data['type'] as String;
-    final moduleId = data['moduleId'] as String?;
-    final chapterId = data['chapterId'] as String?;
-
-    if (type == 'resource') {
-      // Ouvrir la ressource
-      final filePath = data['filePath'] as String?;
-      if (filePath != null) {
-        // TODO: Implémenter l'ouverture du fichier
-      }
-    } else if (type == 'quiz') {
-      // Naviguer vers le quiz
-      if (moduleId != null && chapterId != null) {
-        Navigator.pushNamed(
-          context,
-          '/quiz',
-          arguments: {
-            'quizId': id,
-            'moduleId': moduleId,
-            'chapterId': chapterId,
-          },
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Élément supprimé avec succès'),
+            backgroundColor: Colors.green,
+          ),
         );
       }
+    } catch (e) {
+      print('Erreur lors de la suppression: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors de la suppression: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      setState(() => _isDeleting = false);
+    }
+  }
+
+  Future<void> _clearAllDownloads() async {
+    try {
+      setState(() => _isDeleting = true);
+      await _downloadStorage.clearAllDownloads();
+      await _loadDownloadedItems();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Tous les téléchargements ont été supprimés'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Erreur lors de la suppression des téléchargements: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors de la suppression: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      setState(() => _isDeleting = false);
     }
   }
 
@@ -98,34 +110,37 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
           if (_downloadedItems.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.delete_sweep),
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Supprimer tous les téléchargements'),
-                    content: const Text(
-                        'Voulez-vous vraiment supprimer tous les téléchargements ?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Annuler'),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _deleteAllDownloads();
-                        },
-                        child: const Text('Supprimer'),
-                      ),
-                    ],
-                  ),
-                );
-              },
+              onPressed: _isDeleting
+                  ? null
+                  : () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title:
+                              const Text('Supprimer tous les téléchargements'),
+                          content: const Text(
+                              'Êtes-vous sûr de vouloir supprimer tous les téléchargements ?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Annuler'),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                _clearAllDownloads();
+                              },
+                              child: const Text('Supprimer'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
             ),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: LoadingIndicator())
           : _downloadedItems.isEmpty
               ? Center(
                   child: Column(
@@ -134,20 +149,20 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                       Icon(
                         Icons.download_done,
                         size: 64,
-                        color: Colors.grey[400],
+                        color: Colors.blue.withOpacity(0.5),
                       ),
                       const SizedBox(height: 16),
                       Text(
                         'Aucun téléchargement',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              color: Colors.grey[600],
-                            ),
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: Colors.grey[600],
+                                ),
                       ),
                     ],
                   ),
                 )
               : ListView.builder(
-                  padding: const EdgeInsets.all(16),
                   itemCount: _downloadedItems.length,
                   itemBuilder: (context, index) {
                     final chapterId = _downloadedItems.keys.elementAt(index);
@@ -156,62 +171,60 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                         chapterData['activities'] ?? []);
 
                     return Card(
-                      margin: const EdgeInsets.only(bottom: 16),
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
                       child: ExpansionTile(
                         title: Text(
                           chapterData['title'] ?? 'Chapitre sans titre',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
+                          style: Theme.of(context).textTheme.titleMedium,
                         ),
                         subtitle: Text(
                           '${activities.length} activité(s)',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                          ),
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
-                        children: activities.map((activity) {
-                          return ListTile(
-                            leading: Icon(
-                              activity['type'] == 'resource'
-                                  ? Icons.file_present
-                                  : Icons.quiz,
-                              color: activity['type'] == 'resource'
-                                  ? Colors.blue
-                                  : Colors.orange,
-                            ),
-                            title: Text(activity['title'] ?? 'Sans titre'),
-                            subtitle: Text(
-                              activity['type'] == 'resource'
-                                  ? 'Ressource'
-                                  : 'Quiz',
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 12,
-                              ),
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.open_in_new),
-                                  onPressed: () => _navigateToItem(
-                                    activity['id'],
-                                    activity,
+                        children: [
+                          if (activities.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.all(16.0),
+                              child: Text('Aucune activité dans ce chapitre'),
+                            )
+                          else
+                            ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: activities.length,
+                              itemBuilder: (context, activityIndex) {
+                                final activity = activities[activityIndex];
+                                return ListTile(
+                                  leading: Icon(
+                                    activity['type'] == 'resource'
+                                        ? Icons.description
+                                        : Icons.quiz,
+                                    color: Colors.blue,
                                   ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete),
-                                  onPressed: () => _deleteItem(
-                                    activity['id'],
-                                    activity['type'],
+                                  title: Text(
+                                    activity['title'] ?? 'Sans titre',
+                                    style:
+                                        Theme.of(context).textTheme.bodyMedium,
                                   ),
-                                ),
-                              ],
+                                  subtitle: Text(
+                                    activity['type'] == 'resource'
+                                        ? 'Ressource'
+                                        : 'Quiz',
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall,
+                                  ),
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.delete),
+                                    onPressed: _isDeleting
+                                        ? null
+                                        : () => _deleteItem(
+                                            activity['id'], activity['type']),
+                                  ),
+                                );
+                              },
                             ),
-                          );
-                        }).toList(),
+                        ],
                       ),
                     );
                   },

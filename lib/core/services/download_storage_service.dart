@@ -5,25 +5,22 @@ class DownloadStorageService {
   static const String downloadedResourcesBox = 'downloaded_resources';
   static const String downloadedQuizzesBox = 'downloaded_quizzes';
 
-  Box<Map<String, dynamic>>? _resourcesBox;
-  Box<Map<String, dynamic>>? _chaptersBox;
-  Box<Map<String, dynamic>>? _quizzesBox;
+  Box<dynamic>? _resourcesBox;
+  Box<dynamic>? _chaptersBox;
+  Box<dynamic>? _quizzesBox;
 
-  Future<Box<Map<String, dynamic>>> _getResourcesBox() async {
-    _resourcesBox ??=
-        await Hive.openBox<Map<String, dynamic>>('downloaded_resources');
+  Future<Box<dynamic>> _getResourcesBox() async {
+    _resourcesBox ??= await Hive.openBox('downloaded_resources');
     return _resourcesBox!;
   }
 
-  Future<Box<Map<String, dynamic>>> _getChaptersBox() async {
-    _chaptersBox ??=
-        await Hive.openBox<Map<String, dynamic>>('downloaded_chapters');
+  Future<Box<dynamic>> _getChaptersBox() async {
+    _chaptersBox ??= await Hive.openBox('downloaded_chapters');
     return _chaptersBox!;
   }
 
-  Future<Box<Map<String, dynamic>>> _getQuizzesBox() async {
-    _quizzesBox ??=
-        await Hive.openBox<Map<String, dynamic>>('downloaded_quizzes');
+  Future<Box<dynamic>> _getQuizzesBox() async {
+    _quizzesBox ??= await Hive.openBox('downloaded_quizzes');
     return _quizzesBox!;
   }
 
@@ -181,76 +178,71 @@ class DownloadStorageService {
       for (var key in chaptersBox.keys) {
         final data = chaptersBox.get(key);
         if (data != null) {
-          if (data is bool) {
-            // Convertir les anciennes données bool en Map
-            items[key] = {
-              'type': 'chapter',
-              'downloadedAt': DateTime.now().toIso8601String(),
-              'activities': <Map<String, dynamic>>[],
-            };
-          } else if (data is Map) {
-            items[key] = {
-              ...Map<String, dynamic>.from(data),
-              'activities': <Map<String, dynamic>>[],
-            };
+          final Map<String, dynamic> chapterData = {
+            'type': 'chapter',
+            'downloadedAt': DateTime.now().toIso8601String(),
+            'activities': <Map<String, dynamic>>[],
+          };
+
+          if (data is Map) {
+            for (var entry in data.entries) {
+              if (entry.key != 'activities') {
+                chapterData[entry.key.toString()] = entry.value;
+              }
+            }
           }
+
+          items[key.toString()] = chapterData;
         }
       }
 
-      // Ensuite, ajouter les ressources et quiz dans leurs chapitres respectifs
+      // Ensuite, ajouter les ressources
       for (var key in resourcesBox.keys) {
         final data = resourcesBox.get(key);
         if (data != null) {
-          Map<String, dynamic> resourceData;
-          if (data is bool) {
-            // Convertir les anciennes données bool en Map
-            resourceData = {
-              'type': 'resource',
-              'downloadedAt': DateTime.now().toIso8601String(),
-            };
-          } else if (data is Map) {
-            resourceData = Map<String, dynamic>.from(data);
-          } else {
-            continue;
+          final Map<String, dynamic> resourceData = {
+            'type': 'resource',
+            'id': key.toString(),
+            'downloadedAt': DateTime.now().toIso8601String(),
+          };
+
+          if (data is Map) {
+            for (var entry in data.entries) {
+              resourceData[entry.key.toString()] = entry.value;
+            }
           }
 
-          final chapterId = resourceData['chapterId'] as String?;
+          final chapterId = resourceData['chapterId']?.toString();
           if (chapterId != null && items.containsKey(chapterId)) {
             final activities = List<Map<String, dynamic>>.from(
-                items[chapterId]!['activities']);
-            activities.add({
-              ...resourceData,
-              'id': key,
-            });
+                items[chapterId]!['activities'] ?? []);
+            activities.add(resourceData);
             items[chapterId]!['activities'] = activities;
           }
         }
       }
 
+      // Enfin, ajouter les quiz
       for (var key in quizzesBox.keys) {
         final data = quizzesBox.get(key);
         if (data != null) {
-          Map<String, dynamic> quizData;
-          if (data is bool) {
-            // Convertir les anciennes données bool en Map
-            quizData = {
-              'type': 'quiz',
-              'downloadedAt': DateTime.now().toIso8601String(),
-            };
-          } else if (data is Map) {
-            quizData = Map<String, dynamic>.from(data);
-          } else {
-            continue;
+          final Map<String, dynamic> quizData = {
+            'type': 'quiz',
+            'id': key.toString(),
+            'downloadedAt': DateTime.now().toIso8601String(),
+          };
+
+          if (data is Map) {
+            for (var entry in data.entries) {
+              quizData[entry.key.toString()] = entry.value;
+            }
           }
 
-          final chapterId = quizData['chapterId'] as String?;
+          final chapterId = quizData['chapterId']?.toString();
           if (chapterId != null && items.containsKey(chapterId)) {
             final activities = List<Map<String, dynamic>>.from(
-                items[chapterId]!['activities']);
-            activities.add({
-              ...quizData,
-              'id': key,
-            });
+                items[chapterId]!['activities'] ?? []);
+            activities.add(quizData);
             items[chapterId]!['activities'] = activities;
           }
         }
