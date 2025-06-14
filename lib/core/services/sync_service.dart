@@ -12,6 +12,8 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'dart:convert';
 
+import '../../features/modules/models/assignment.dart';
+
 class SyncService {
   final OfflineStorageService _storage = OfflineStorageService();
   final DownloadStorageService _downloadStorage = DownloadStorageService();
@@ -527,6 +529,40 @@ class SyncService {
       onProgress?.call(1.0);
     } catch (e) {
       print('Erreur lors du téléchargement du quiz: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> downloadAssignment(
+    Assignment assignment, {
+    void Function(double)? individualProgress,
+  }) async {
+    try {
+      print('Téléchargement du devoir: ${assignment.title}');
+
+      // Télécharger les pièces jointes
+      for (var attachment in assignment.attachments) {
+        await downloadAttachment(
+          attachment,
+          individualProgress: individualProgress,
+        );
+      }
+
+      // Marquer le devoir comme téléchargé
+      await _downloadStorage.markAssignmentAsDownloaded(
+        assignment.id,
+        {
+          'moduleId': assignment.moduleId,
+          'chapterId': assignment.chapterId,
+          'title': assignment.title,
+          'type': 'assignment',
+          'downloadedAt': DateTime.now().toIso8601String(),
+        },
+      );
+
+      print('Devoir téléchargé avec succès: ${assignment.id}');
+    } catch (e) {
+      print('Erreur lors du téléchargement du devoir: $e');
       rethrow;
     }
   }

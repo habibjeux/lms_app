@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/services/sync_service.dart';
 import '../models/activity.dart';
 import '../models/resource.dart';
+import '../models/assignment.dart';
 
 class ActivityProvider with ChangeNotifier {
   final SyncService _syncService = SyncService();
@@ -65,6 +66,30 @@ class ActivityProvider with ChangeNotifier {
       _downloadStatus[quizId] = true;
     }
     notifyListeners();
+  }
+
+  Future<void> downloadAssignment(Assignment assignment) async {
+    _isDownloading[assignment.id] = true;
+    _downloadProgress[assignment.id] = 0.0;
+    notifyListeners();
+
+    try {
+      await _syncService.downloadAssignment(
+        assignment,
+        individualProgress: (progress) {
+          _downloadProgress[assignment.id] = progress;
+          notifyListeners();
+        },
+      );
+
+      _downloadStatus[assignment.id] = true;
+      _isDownloading[assignment.id] = false;
+      notifyListeners();
+    } catch (e) {
+      _isDownloading[assignment.id] = false;
+      notifyListeners();
+      throw Exception('Erreur lors du téléchargement: $e');
+    }
   }
 
   bool shouldDisplayActivity(

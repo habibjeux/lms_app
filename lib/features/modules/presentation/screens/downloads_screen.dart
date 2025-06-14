@@ -31,8 +31,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       // Organiser les éléments par module et chapitre
       final Map<String, Map<String, dynamic>> organizedItems = {};
 
-      for (var entry in items.entries) {
-        final itemData = entry.value;
+      for (var itemData in items) {
         final moduleId = itemData['moduleId']?.toString();
         final chapterId = itemData['chapterId']?.toString();
 
@@ -40,7 +39,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
           if (!organizedItems.containsKey(moduleId)) {
             // Récupérer le titre du module depuis les données
             String moduleTitle = 'Module';
-            for (var item in items.values) {
+            for (var item in items) {
               if (item['moduleId'] == moduleId && item['moduleTitle'] != null) {
                 moduleTitle = item['moduleTitle'];
                 break;
@@ -60,7 +59,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
             if (!organizedItems[moduleId]!['chapters'].containsKey(chapterId)) {
               // Récupérer le titre du chapitre depuis les données
               String chapterTitle = 'Chapitre';
-              for (var item in items.values) {
+              for (var item in items) {
                 if (item['chapterId'] == chapterId &&
                     item['chapterTitle'] != null) {
                   chapterTitle = item['chapterTitle'];
@@ -78,13 +77,13 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                     as List)
                 .add({
               ...itemData,
-              'id': entry.key,
+              'id': itemData['id'],
             });
           } else {
             // Ajouter aux activités du module
             (organizedItems[moduleId]!['activities'] as List).add({
               ...itemData,
-              'id': entry.key,
+              'id': itemData['id'],
             });
           }
         }

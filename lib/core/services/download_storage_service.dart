@@ -165,7 +165,7 @@ class DownloadStorageService {
     await quizzesBox.clear();
   }
 
-  Future<Map<String, Map<String, dynamic>>> getDownloadedItems() async {
+  Future<List<Map<String, dynamic>>> getDownloadedItems() async {
     try {
       print('Récupération des éléments téléchargés');
       final resourcesBox = await _getResourcesBox();
@@ -179,18 +179,16 @@ class DownloadStorageService {
       print('Quiz: ${quizzesBox.toMap()}');
       print('Assignments: ${assignmentsBox.toMap()}');
 
-      final Map<String, Map<String, dynamic>> items = {};
+      final List<Map<String, dynamic>> items = [];
 
       // Récupérer les ressources
       for (var key in resourcesBox.keys) {
         final data = resourcesBox.get(key);
         if (data is Map) {
-          items[key.toString()] = Map<String, dynamic>.from(data);
-        } else if (data is bool) {
-          items[key.toString()] = {
-            'type': 'resource',
-            'downloaded': data,
-          };
+          items.add({
+            'id': key.toString(),
+            ...Map<String, dynamic>.from(data),
+          });
         }
       }
 
@@ -198,12 +196,10 @@ class DownloadStorageService {
       for (var key in chaptersBox.keys) {
         final data = chaptersBox.get(key);
         if (data is Map) {
-          items[key.toString()] = Map<String, dynamic>.from(data);
-        } else if (data is bool) {
-          items[key.toString()] = {
-            'type': 'chapter',
-            'downloaded': data,
-          };
+          items.add({
+            'id': key.toString(),
+            ...Map<String, dynamic>.from(data),
+          });
         }
       }
 
@@ -211,12 +207,16 @@ class DownloadStorageService {
       for (var key in quizzesBox.keys) {
         final data = quizzesBox.get(key);
         if (data is Map) {
-          items[key.toString()] = Map<String, dynamic>.from(data);
+          items.add({
+            'id': key.toString(),
+            ...Map<String, dynamic>.from(data),
+          });
         } else if (data is bool) {
-          items[key.toString()] = {
+          items.add({
+            'id': key.toString(),
             'type': 'quiz',
             'downloaded': data,
-          };
+          });
         }
       }
 
@@ -224,12 +224,10 @@ class DownloadStorageService {
       for (var key in assignmentsBox.keys) {
         final data = assignmentsBox.get(key);
         if (data is Map) {
-          items[key.toString()] = Map<String, dynamic>.from(data);
-        } else if (data is bool) {
-          items[key.toString()] = {
-            'type': 'assignment',
-            'downloaded': data,
-          };
+          items.add({
+            'id': key.toString(),
+            ...Map<String, dynamic>.from(data),
+          });
         }
       }
 
@@ -237,7 +235,7 @@ class DownloadStorageService {
       return items;
     } catch (e) {
       print('Erreur lors de la récupération des éléments téléchargés: $e');
-      return {};
+      return [];
     }
   }
 

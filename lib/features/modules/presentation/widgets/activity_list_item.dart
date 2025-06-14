@@ -7,6 +7,7 @@ import '../../models/activity.dart';
 import '../../models/enums/activity_type.dart';
 import '../../models/enums/resource_type.dart';
 import '../../models/resource.dart';
+import '../../models/assignment.dart';
 import '../../providers/activity_provider.dart';
 import '../../../quizzes/presentation/screens/quiz_detail_screen.dart';
 import '../screens/activity_detail_screen.dart';
@@ -84,15 +85,13 @@ class ActivityListItem extends StatelessWidget {
 
   Widget _buildDownloadStatus(BuildContext context, ActivityProvider provider,
       ConnectivityProvider connectivityProvider) {
-    if (activity is Resource) {
-      final resource = activity as Resource;
+    if (activity.type == ActivityType.RESOURCE) {
       if (provider.isDownloading(activity.id)) {
-        return SizedBox(
+        return const SizedBox(
           width: 20,
           height: 20,
           child: CircularProgressIndicator(
             strokeWidth: 2,
-            value: provider.downloadProgress(activity.id),
           ),
         );
       }
@@ -114,7 +113,8 @@ class ActivityListItem extends StatelessWidget {
 
       return IconButton(
         icon: const Icon(Icons.cloud_download, size: 20),
-        onPressed: () => _handleResourceDownload(context, provider, resource),
+        onPressed: () =>
+            _handleResourceDownload(context, provider, activity as Resource),
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints(),
       );
@@ -147,6 +147,39 @@ class ActivityListItem extends StatelessWidget {
       return IconButton(
         icon: const Icon(Icons.cloud_download, size: 20),
         onPressed: () => _handleQuizDownload(context, provider),
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(),
+      );
+    } else if (activity.type == ActivityType.ASSIGNMENT) {
+      if (provider.isDownloading(activity.id)) {
+        return const SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+          ),
+        );
+      }
+
+      if (!connectivityProvider.isOnline) {
+        return Icon(
+          provider.isDownloaded(activity.id)
+              ? Icons.offline_pin
+              : Icons.offline_bolt,
+          color:
+              provider.isDownloaded(activity.id) ? Colors.green : Colors.orange,
+          size: 20,
+        );
+      }
+
+      if (provider.isDownloaded(activity.id)) {
+        return const Icon(Icons.cloud_done, color: Colors.green, size: 20);
+      }
+
+      return IconButton(
+        icon: const Icon(Icons.cloud_download, size: 20),
+        onPressed: () => _handleAssignmentDownload(
+            context, provider, activity as Assignment),
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints(),
       );
@@ -193,6 +226,24 @@ class ActivityListItem extends StatelessWidget {
     } catch (e) {
       provider.completeQuizDownload(activity.id, false);
 
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur lors du téléchargement: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleAssignmentDownload(BuildContext context,
+      ActivityProvider provider, Assignment assignment) async {
+    try {
+      await provider.downloadAssignment(assignment);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Devoir téléchargé avec succès')),
+        );
+      }
+    } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Erreur lors du téléchargement: $e')),
