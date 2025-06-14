@@ -10,6 +10,7 @@ import 'core/providers/connectivity_provider.dart';
 import 'core/providers/dashboard_provider.dart';
 import 'core/providers/expandable_text_field_provider.dart';
 import 'core/providers/login_form_provider.dart';
+import 'core/services/download_storage_service.dart';
 import 'core/widgets/connectivity/connectivity_overlay.dart';
 import 'features/auth/presentation/widgets/auth_wrapper_first.dart';
 import 'features/auth/providers/auth_provider.dart';
@@ -61,6 +62,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => JitsiMeetingProvider()),
         ChangeNotifierProvider(create: (_) => DashboardProvider()),
         ChangeNotifierProvider(create: (_) => ExpandableTextFieldProvider()),
+        Provider(create: (_) => DownloadStorageService()),
       ],
       child: MaterialApp(
           builder: (context, child) => ConnectivityOverlay(child: child!),

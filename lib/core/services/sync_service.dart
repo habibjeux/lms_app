@@ -4,6 +4,7 @@ import 'package:hive/hive.dart';
 import '../../features/modules/models/activity.dart';
 import '../../features/modules/models/assignment_attachment.dart';
 import '../../features/modules/models/resource.dart';
+import '../../features/modules/models/enums/activity_type.dart';
 import '../network/api_client.dart';
 import 'download_storage_service.dart';
 import 'offline_storage_service.dart';
@@ -43,6 +44,29 @@ class SyncService {
     }
   }
 
+  Future<ConnectionQuality> getConnectionQuality() async {
+    if (!await isOnline()) {
+      return ConnectionQuality.offline;
+    }
+
+    try {
+      final startTime = DateTime.now();
+      await _api.get('/ping');
+      final endTime = DateTime.now();
+      final responseTime = endTime.difference(startTime).inMilliseconds;
+
+      if (responseTime < 1000) {
+        return ConnectionQuality.good;
+      } else if (responseTime < 3000) {
+        return ConnectionQuality.medium;
+      } else {
+        return ConnectionQuality.poor;
+      }
+    } catch (e) {
+      return ConnectionQuality.poor;
+    }
+  }
+
   Future<bool> isChapterDownloaded(String chapterId) async {
     return await _downloadStorage.isChapterDownloaded(chapterId);
   }
@@ -63,10 +87,25 @@ class SyncService {
     }
 
     try {
-      final response = await _api.get('/chapters/$chapterId/activities');
-      final activities = List<Map<String, dynamic>>.from(response.data['data']);
+      final response = await _api.get('/chapters/$chapterId');
+      final chapterData = response.data['data'] as Map<String, dynamic>;
+      final moduleId = chapterData['moduleId'] as String;
+      final title = chapterData['title'] as String;
+      final content = chapterData['content'] as String?;
 
-      final resources = activities.where((a) => a['type'] == 'RESOURCE').length;
+      print('Téléchargement du chapitre: $title (ID: $chapterId)');
+
+      // Sauvegarder le contenu du chapitre
+      if (content != null) {
+        await _storage.saveChapterContent(chapterId, content);
+      }
+
+      final activitiesResponse =
+          await _api.get('/chapters/$chapterId/activities');
+      final activities =
+          List<Map<String, dynamic>>.from(activitiesResponse.data['data']);
+
+      final totalItems = activities.length;
       int downloadedCount = 0;
 
       await _storage.saveActivities(chapterId, activities);
@@ -76,22 +115,46 @@ class SyncService {
 
         if (activity is Resource) {
           try {
+            print('Téléchargement de la ressource: ${activity.title}');
             await downloadResource(
               activity,
               isPartOfSync: true,
             );
             downloadedCount++;
-            onProgress?.call(downloadedCount / resources);
+            onProgress?.call(downloadedCount / totalItems);
           } catch (e) {
+            print('Erreur lors du téléchargement de la ressource: $e');
             onError?.call(
                 'Erreur lors du téléchargement de ${activity.title}: $e');
+          }
+        } else if (activity.type == ActivityType.QUIZ) {
+          try {
+            print('Téléchargement du quiz: ${activity.title}');
+            await downloadQuiz(
+              activity.id,
+              moduleId: moduleId,
+              chapterId: chapterId,
+              title: activity.title,
+            );
+            downloadedCount++;
+            onProgress?.call(downloadedCount / totalItems);
+          } catch (e) {
+            print('Erreur lors du téléchargement du quiz: $e');
+            onError?.call(
+                'Erreur lors du téléchargement du quiz ${activity.title}: $e');
           }
         }
       }
 
-      await _downloadStorage.markChapterAsDownloaded(chapterId);
+      print('Marquage du chapitre comme téléchargé: $chapterId');
+      await _downloadStorage.markChapterAsDownloaded(
+        chapterId,
+        moduleId: moduleId,
+        title: title,
+      );
       onComplete?.call();
     } catch (e) {
+      print('Erreur lors du téléchargement du chapitre: $e');
       onError?.call('Erreur lors du téléchargement du chapitre: $e');
     }
   }
@@ -107,12 +170,24 @@ class SyncService {
       final file = File('$localPath/$fileName');
 
       if (await file.exists()) {
-        await _downloadStorage.markResourceAsDownloaded(resource.id);
+        print('La ressource existe déjà: ${resource.title}');
+        await _downloadStorage.markResourceAsDownloaded(
+          resource.id,
+          moduleId: resource.moduleId,
+          chapterId: resource.chapterId,
+          title: resource.title,
+        );
         return;
       }
 
+      print('Téléchargement de la ressource: ${resource.title}');
+      final connectionQuality = await getConnectionQuality();
+      final url = connectionQuality == ConnectionQuality.good
+          ? resource.url
+          : resource.compressedUrl ?? resource.url;
+
       final response = await _apiUpload.get(
-        resource.compressedUrl ?? resource.url,
+        url,
         options: Options(
           responseType: ResponseType.bytes,
           followRedirects: true,
@@ -125,7 +200,13 @@ class SyncService {
       );
 
       await file.writeAsBytes(response.data);
-      await _downloadStorage.markResourceAsDownloaded(resource.id);
+      print('Ressource téléchargée avec succès: ${resource.title}');
+      await _downloadStorage.markResourceAsDownloaded(
+        resource.id,
+        moduleId: resource.moduleId,
+        chapterId: resource.chapterId,
+        title: resource.title,
+      );
     } catch (e) {
       print('Erreur lors du téléchargement de la ressource: $e');
       rethrow;
@@ -329,6 +410,126 @@ class SyncService {
       rethrow;
     }
   }
+
+  Future<void> downloadFullModule(
+    String moduleId, {
+    void Function(double)? onProgress,
+    void Function()? onComplete,
+    void Function(String)? onError,
+  }) async {
+    try {
+      print('Téléchargement du module complet: $moduleId');
+      final response = await _api.get('/modules/$moduleId/chapters');
+      final chapters = List<Map<String, dynamic>>.from(response.data);
+
+      if (chapters.isEmpty) {
+        onError?.call('Aucun chapitre trouvé dans ce module');
+        return;
+      }
+
+      final totalChapters = chapters.length;
+      int downloadedChapters = 0;
+
+      for (var chapterData in chapters) {
+        final chapterId = chapterData['id'] as String;
+        final title = chapterData['title'] as String;
+        final content = chapterData['content'] as String?;
+
+        print('Téléchargement du chapitre: $title (ID: $chapterId)');
+
+        // Sauvegarder le contenu du chapitre
+        if (content != null) {
+          await _storage.saveChapterContent(chapterId, content);
+        }
+
+        // Télécharger les activités du chapitre
+        final activitiesResponse =
+            await _api.get('/chapters/$chapterId/activities');
+        final activities =
+            List<Map<String, dynamic>>.from(activitiesResponse.data['data']);
+
+        await _storage.saveActivities(chapterId, activities);
+
+        for (var activityData in activities) {
+          final activity = Activity.fromJson(activityData);
+
+          if (activity is Resource) {
+            try {
+              print('Téléchargement de la ressource: ${activity.title}');
+              await downloadResource(
+                activity,
+                isPartOfSync: true,
+              );
+            } catch (e) {
+              print('Erreur lors du téléchargement de la ressource: $e');
+              onError
+                  ?.call('Erreur lors du téléchargement de la ressource: $e');
+            }
+          } else if (activity.type == ActivityType.QUIZ) {
+            try {
+              print('Téléchargement du quiz: ${activity.title}');
+              await downloadQuiz(
+                activity.id,
+                moduleId: moduleId,
+                chapterId: chapterId,
+                title: activity.title,
+              );
+            } catch (e) {
+              print('Erreur lors du téléchargement du quiz: $e');
+              onError?.call('Erreur lors du téléchargement du quiz: $e');
+            }
+          }
+        }
+
+        await _downloadStorage.markChapterAsDownloaded(
+          chapterId,
+          moduleId: moduleId,
+          title: title,
+        );
+
+        downloadedChapters++;
+        onProgress?.call(downloadedChapters / totalChapters);
+        print('Progression: $downloadedChapters/$totalChapters chapitres');
+      }
+
+      print('Module téléchargé avec succès: $moduleId');
+      onComplete?.call();
+    } catch (e) {
+      print('Erreur lors du téléchargement du module: $e');
+      onError?.call('Erreur lors du téléchargement du module: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> downloadQuiz(
+    String quizId, {
+    String? moduleId,
+    String? chapterId,
+    String? title,
+    void Function(double)? onProgress,
+  }) async {
+    try {
+      print('Téléchargement du quiz: $title (ID: $quizId)');
+      final response = await _api.get('/quizzes/$quizId');
+      final quizData = response.data['data'];
+
+      // Sauvegarder le quiz localement
+      await _storage.saveQuiz(quizId, quizData);
+      print('Quiz sauvegardé localement: $quizId');
+      await _downloadStorage.markQuizAsDownloaded(
+        quizId,
+        moduleId: moduleId,
+        chapterId: chapterId,
+        title: title,
+      );
+      print('Quiz marqué comme téléchargé: $quizId');
+
+      onProgress?.call(1.0);
+    } catch (e) {
+      print('Erreur lors du téléchargement du quiz: $e');
+      rethrow;
+    }
+  }
 }
 
 extension AssignmentExtensions on SyncService {
@@ -519,4 +720,11 @@ extension AssignmentExtensions on SyncService {
       print('Erreur lors de la synchronisation des devoirs: $e');
     }
   }
+}
+
+enum ConnectionQuality {
+  offline,
+  poor,
+  medium,
+  good,
 }

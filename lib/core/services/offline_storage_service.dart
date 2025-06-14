@@ -6,6 +6,7 @@ class OfflineStorageService {
   static const String chapterBoxName = 'chapters';
   static const String activitiesBoxName = 'activities';
   static const String lastSyncBoxName = 'lastSync';
+  static const String _quizzesBox = 'quizzes';
 
   Future<Box> _openBox(String boxName) async {
     if (!Hive.isBoxOpen(boxName)) {
@@ -164,5 +165,36 @@ class OfflineStorageService {
 
   Future<void> saveLastSync(String key, DateTime dateTime) async {
     await _updateLastSync(key);
+  }
+
+  Future<void> saveQuiz(String quizId, Map<String, dynamic> quizData) async {
+    final box = await Hive.openBox(_quizzesBox);
+    await box.put(quizId, quizData);
+  }
+
+  Future<Map<String, dynamic>?> getQuiz(String quizId) async {
+    final box = await Hive.openBox(_quizzesBox);
+    return box.get(quizId);
+  }
+
+  Future<void> saveChapterContent(String chapterId, String content) async {
+    try {
+      final box = await Hive.openBox<String>('chapter_contents');
+      await box.put(chapterId, content);
+      print('Contenu du chapitre sauvegardé: $chapterId');
+    } catch (e) {
+      print('Erreur lors de la sauvegarde du contenu du chapitre: $e');
+      rethrow;
+    }
+  }
+
+  Future<String?> getChapterContent(String chapterId) async {
+    try {
+      final box = await Hive.openBox<String>('chapter_contents');
+      return box.get(chapterId);
+    } catch (e) {
+      print('Erreur lors de la récupération du contenu du chapitre: $e');
+      return null;
+    }
   }
 }
