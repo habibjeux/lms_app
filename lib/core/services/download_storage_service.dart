@@ -8,6 +8,11 @@ class DownloadStorageService {
   Box<dynamic>? _resourcesBox;
   Box<dynamic>? _chaptersBox;
   Box<dynamic>? _quizzesBox;
+  String? _currentUserId;
+
+  void setCurrentUser(String userId) {
+    _currentUserId = userId;
+  }
 
   Future<Box<dynamic>> _getResourcesBox() async {
     _resourcesBox ??= await Hive.openBox('downloaded_resources');
@@ -166,85 +171,65 @@ class DownloadStorageService {
       final resourcesBox = await _getResourcesBox();
       final chaptersBox = await _getChaptersBox();
       final quizzesBox = await _getQuizzesBox();
+      final assignmentsBox = await _getAssignmentsBox();
 
       print('Contenu des boîtes:');
       print('Ressources: ${resourcesBox.toMap()}');
       print('Chapitres: ${chaptersBox.toMap()}');
       print('Quiz: ${quizzesBox.toMap()}');
+      print('Assignments: ${assignmentsBox.toMap()}');
 
-      final items = <String, Map<String, dynamic>>{};
+      final Map<String, Map<String, dynamic>> items = {};
 
-      // D'abord, ajouter les chapitres
-      for (var key in chaptersBox.keys) {
-        final data = chaptersBox.get(key);
-        if (data != null) {
-          final Map<String, dynamic> chapterData = {
-            'type': 'chapter',
-            'downloadedAt': DateTime.now().toIso8601String(),
-            'activities': <Map<String, dynamic>>[],
-          };
-
-          if (data is Map) {
-            for (var entry in data.entries) {
-              if (entry.key != 'activities') {
-                chapterData[entry.key.toString()] = entry.value;
-              }
-            }
-          }
-
-          items[key.toString()] = chapterData;
-        }
-      }
-
-      // Ensuite, ajouter les ressources
+      // Récupérer les ressources
       for (var key in resourcesBox.keys) {
         final data = resourcesBox.get(key);
-        if (data != null) {
-          final Map<String, dynamic> resourceData = {
+        if (data is Map) {
+          items[key.toString()] = Map<String, dynamic>.from(data);
+        } else if (data is bool) {
+          items[key.toString()] = {
             'type': 'resource',
-            'id': key.toString(),
-            'downloadedAt': DateTime.now().toIso8601String(),
+            'downloaded': data,
           };
-
-          if (data is Map) {
-            for (var entry in data.entries) {
-              resourceData[entry.key.toString()] = entry.value;
-            }
-          }
-
-          final chapterId = resourceData['chapterId']?.toString();
-          if (chapterId != null && items.containsKey(chapterId)) {
-            final activities = List<Map<String, dynamic>>.from(
-                items[chapterId]!['activities'] ?? []);
-            activities.add(resourceData);
-            items[chapterId]!['activities'] = activities;
-          }
         }
       }
 
-      // Enfin, ajouter les quiz
+      // Récupérer les chapitres
+      for (var key in chaptersBox.keys) {
+        final data = chaptersBox.get(key);
+        if (data is Map) {
+          items[key.toString()] = Map<String, dynamic>.from(data);
+        } else if (data is bool) {
+          items[key.toString()] = {
+            'type': 'chapter',
+            'downloaded': data,
+          };
+        }
+      }
+
+      // Récupérer les quiz
       for (var key in quizzesBox.keys) {
         final data = quizzesBox.get(key);
-        if (data != null) {
-          final Map<String, dynamic> quizData = {
+        if (data is Map) {
+          items[key.toString()] = Map<String, dynamic>.from(data);
+        } else if (data is bool) {
+          items[key.toString()] = {
             'type': 'quiz',
-            'id': key.toString(),
-            'downloadedAt': DateTime.now().toIso8601String(),
+            'downloaded': data,
           };
+        }
+      }
 
-          if (data is Map) {
-            for (var entry in data.entries) {
-              quizData[entry.key.toString()] = entry.value;
-            }
-          }
-
-          final chapterId = quizData['chapterId']?.toString();
-          if (chapterId != null && items.containsKey(chapterId)) {
-            final activities = List<Map<String, dynamic>>.from(
-                items[chapterId]!['activities'] ?? []);
-            activities.add(quizData);
-            items[chapterId]!['activities'] = activities;
-          }
+      // Récupérer les assignments
+      for (var key in assignmentsBox.keys) {
+        final data = assignmentsBox.get(key);
+        if (data is Map) {
+          items[key.toString()] = Map<String, dynamic>.from(data);
+        } else if (data is bool) {
+          items[key.toString()] = {
+            'type': 'assignment',
+            'downloaded': data,
+          };
         }
       }
 
@@ -252,7 +237,7 @@ class DownloadStorageService {
       return items;
     } catch (e) {
       print('Erreur lors de la récupération des éléments téléchargés: $e');
-      rethrow;
+      return {};
     }
   }
 
@@ -296,5 +281,35 @@ class DownloadStorageService {
       print('Erreur lors de la suppression des téléchargements: $e');
       rethrow;
     }
+  }
+
+  Future<Box> _getAssignmentsBox() async {
+    final boxName = 'assignments_${_currentUserId ?? 'default'}';
+    return await Hive.openBox(boxName);
+  }
+
+  Future<void> markAssignmentAsDownloaded(
+      String assignmentId, Map<String, dynamic> data) async {
+    final box = await _getAssignmentsBox();
+    await box.put(assignmentId, data);
+  }
+
+  Future<bool> isAssignmentDownloaded(String assignmentId) async {
+    final box = await _getAssignmentsBox();
+    return box.containsKey(assignmentId);
+  }
+
+  Future<Map<String, dynamic>?> getAssignmentInfo(String assignmentId) async {
+    final box = await _getAssignmentsBox();
+    final data = box.get(assignmentId);
+    if (data is Map) {
+      return Map<String, dynamic>.from(data);
+    }
+    return null;
+  }
+
+  Future<void> deleteAssignment(String assignmentId) async {
+    final box = await _getAssignmentsBox();
+    await box.delete(assignmentId);
   }
 }
