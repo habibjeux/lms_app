@@ -1,9 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../models/message.dart';
+import '../../providers/messaging_provider.dart';
 import 'attachment_viewer.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../../../auth/models/user.dart';
 
 class MessageBubble extends StatelessWidget {
   final Message message;
@@ -22,236 +23,263 @@ class MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 8.0),
-      child: Column(
-        crossAxisAlignment:
-            isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+      child: Row(
+        mainAxisAlignment:
+            isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Row(
-            mainAxisAlignment:
-                isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              if (!isMe) _buildAvatar(),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: isMe
-                        ? Theme.of(context)
-                            .primaryColor
-                            .withOpacity(isPending ? 0.7 : 1.0)
-                        : Colors.grey[200],
-                    borderRadius: BorderRadius.circular(16.0),
-                  ),
-                  padding: const EdgeInsets.all(12.0),
-                  child: Column(
-                    crossAxisAlignment: isMe
-                        ? CrossAxisAlignment.end
-                        : CrossAxisAlignment.start,
-                    children: [
-                      if (message.content.isNotEmpty)
-                        Text(
-                          message.content,
-                          style: TextStyle(
-                            color: isMe ? Colors.white : Colors.black,
-                          ),
-                        ),
-                      if (message.attachments.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        _buildAttachments(context),
-                      ],
-                      const SizedBox(height: 4),
-                      _buildTimeAndStatus(context),
-                    ],
-                  ),
+          if (!isMe) _buildAvatar(),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Column(
+              crossAxisAlignment:
+                  isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              children: [
+                GestureDetector(
+                  onLongPress: isMe && !isPending && !isError
+                      ? () => _showDeleteDialog(context)
+                      : null,
+                  child: _buildMessageContent(context),
                 ),
-              ),
-              const SizedBox(width: 8),
-              if (isMe) _buildAvatar(),
-            ],
+                if (isPending || isError) _buildStatusIndicator(),
+              ],
+            ),
           ),
+          const SizedBox(width: 8),
+          if (isMe) _buildAvatar(),
         ],
       ),
     );
   }
 
   Widget _buildAvatar() {
-    return isMe
-        ? const SizedBox(width: 32, height: 32) // Placeholder pour l'alignement
-        : CircleAvatar(
-            radius: 16,
-            backgroundColor: Colors.grey,
-            child: Text(
-              message.sender?.firstName.substring(0, 1).toUpperCase() ?? '?',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
+    final user = isMe ? message.sender : message.receiver;
+    final initials = _getInitials(user);
+
+    return CircleAvatar(
+      radius: 16,
+      backgroundColor: isMe ? Colors.blue : Colors.grey,
+      child: Text(
+        initials,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMessageContent(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: isMe ? Theme.of(context).primaryColor : Colors.grey[200],
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (message.attachments.isNotEmpty) _buildAttachments(context),
+          if (message.content.isNotEmpty) ...[
+            if (message.attachments.isNotEmpty) const SizedBox(height: 8),
+            Text(
+              message.content,
+              style: TextStyle(
+                color: isMe ? Colors.white : Colors.black,
+                fontSize: 16,
               ),
             ),
-          );
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusIndicator() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isPending)
+            const SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else if (isError)
+            const Icon(Icons.error_outline, color: Colors.red, size: 16),
+          const SizedBox(width: 4),
+          Text(
+            isPending ? 'Envoi...' : 'Erreur',
+            style: TextStyle(
+              color: isError ? Colors.red : Colors.grey,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildAttachments(BuildContext context) {
-    final attachments = message.attachments;
-    if (attachments.isEmpty) return const SizedBox.shrink();
-
-    return Wrap(
-      spacing: 8.0,
-      runSpacing: 8.0,
-      children: attachments.map((attachment) {
-        return GestureDetector(
-          onTap: () {
-            // Ouvrir la visualisation de la pièce jointe
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => AttachmentViewer(attachment: attachment),
-              ),
-            );
-          },
-          child: _buildAttachmentThumbnail(attachment),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: message.attachments.map((attachment) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: _buildAttachmentPreview(attachment, context),
         );
       }).toList(),
     );
   }
 
-  Widget _buildAttachmentThumbnail(MessageAttachment attachment) {
+  Widget _buildAttachmentPreview(
+      MessageAttachment attachment, BuildContext context) {
     if (attachment.isImage) {
-      // Afficher une miniature de l'image
-      if (attachment.isLocal) {
-        return Container(
-          width: 120,
-          height: 120,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8.0),
-            image: DecorationImage(
-              image: FileImage(File(attachment.localPath!)),
-              fit: BoxFit.cover,
-            ),
+      return _buildImage(attachment);
+    }
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AttachmentViewer(attachment: attachment),
           ),
         );
-      } else {
-        return Container(
-          width: 120,
-          height: 120,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8.0),
-            image: DecorationImage(
-              image: NetworkImage(
-                  "${dotenv.env['SERVER_URL']!}${attachment.fileUrl}"),
-              fit: BoxFit.cover,
-            ),
-          ),
-        );
-      }
-    } else {
-      // Afficher une icône pour les autres types de fichiers
-      IconData iconData;
-      Color iconColor;
-
-      if (attachment.isPdf) {
-        iconData = Icons.picture_as_pdf;
-        iconColor = Colors.red;
-      } else if (attachment.mimeType.contains('word')) {
-        iconData = Icons.description;
-        iconColor = Colors.blue;
-      } else if (attachment.mimeType.contains('excel') ||
-          attachment.mimeType.contains('sheet')) {
-        iconData = Icons.table_chart;
-        iconColor = Colors.green;
-      } else if (attachment.mimeType.contains('presentation') ||
-          attachment.mimeType.contains('powerpoint')) {
-        iconData = Icons.slideshow;
-        iconColor = Colors.orange;
-      } else {
-        iconData = Icons.insert_drive_file;
-        iconColor = Colors.grey;
-      }
-
-      return Container(
-        width: 120,
-        padding: const EdgeInsets.all(8.0),
+      },
+      child: Container(
+        padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: isMe ? Colors.white.withOpacity(0.2) : Colors.white,
-          borderRadius: BorderRadius.circular(8.0),
-          border: Border.all(color: Colors.grey[300]!),
+          color: Colors.grey[300],
+          borderRadius: BorderRadius.circular(8),
         ),
-        child: Column(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              iconData,
-              color: iconColor,
-              size: 40,
+              attachment.isPdf ? Icons.picture_as_pdf : Icons.attach_file,
+              color: attachment.isPdf ? Colors.red : Colors.grey[700],
             ),
-            const SizedBox(height: 4),
-            Text(
-              attachment.filename,
-              style: TextStyle(
-                fontSize: 10,
-                color: isMe ? Colors.white : Colors.black87,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-            ),
-            Text(
-              _formatFileSize(attachment.fileSize),
-              style: TextStyle(
-                fontSize: 8,
-                color: isMe ? Colors.white70 : Colors.black54,
+            const SizedBox(width: 8),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    attachment.filename,
+                    style: const TextStyle(fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    _formatFileSize(attachment.fileSize),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
-      );
-    }
+      ),
+    );
   }
 
-  Widget _buildTimeAndStatus(BuildContext context) {
-    final timeFormat = DateFormat('HH:mm');
-    final time = timeFormat.format(message.createdAt);
+  Widget _buildImage(MessageAttachment attachment) {
+    return FutureBuilder<bool>(
+      future: _checkFileExists(attachment.localPath),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _buildLoadingContainer();
+        }
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          time,
-          style: TextStyle(
-            fontSize: 10,
-            color: isMe ? Colors.white70 : Colors.black54,
-          ),
-        ),
-        const SizedBox(width: 4),
-        if (isMe) ...[
-          if (isPending)
-            const Icon(
-              Icons.access_time,
-              size: 12,
-              color: Colors.white70,
-            )
-          else if (isError)
-            const Icon(
-              Icons.error_outline,
-              size: 12,
-              color: Colors.redAccent,
-            )
-          else if (message.readAt != null)
-            const Icon(
-              Icons.done_all,
-              size: 12,
-              color: Colors.white,
-            )
-          else
-            const Icon(
-              Icons.done,
-              size: 12,
-              color: Colors.white70,
+        final bool fileExists = snapshot.data ?? false;
+        final String imageUrl = fileExists && attachment.localPath != null
+            ? 'file://${attachment.localPath}'
+            : attachment.fileUrl;
+
+        return GestureDetector(
+          onTap: () {
+            if (attachment.localPath != null && fileExists) {
+              _openAttachment(attachment);
+            } else if (attachment.fileUrl.isNotEmpty) {
+              _openAttachment(attachment);
+            }
+          },
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.network(
+              imageUrl,
+              fit: BoxFit.cover,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return _buildLoadingContainer();
+              },
+              errorBuilder: (context, error, stackTrace) {
+                debugPrint('Erreur de chargement de l\'image: $error');
+                return Container(
+                  width: 200,
+                  height: 200,
+                  color: Colors.grey[300],
+                  child: const Center(
+                    child: Icon(Icons.error_outline, color: Colors.red),
+                  ),
+                );
+              },
             ),
-        ],
-      ],
+          ),
+        );
+      },
     );
+  }
+
+  Widget _buildErrorContainer() {
+    return Container(
+      width: 200,
+      height: 150,
+      color: Colors.grey[300],
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.broken_image, size: 32, color: Colors.grey),
+          const SizedBox(height: 8),
+          Text(
+            'Image non disponible',
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingContainer() {
+    return Container(
+      width: 200,
+      height: 150,
+      color: Colors.grey[300],
+      child: const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+  }
+
+  Future<bool> _checkFileExists(String? filePath) async {
+    if (filePath == null) return false;
+    try {
+      final file = File(filePath);
+      return await file.exists();
+    } catch (e) {
+      debugPrint('Erreur lors de la vérification du fichier: $e');
+      return false;
+    }
   }
 
   String _formatFileSize(int bytes) {
@@ -263,6 +291,51 @@ class MessageBubble extends StatelessWidget {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     } else {
       return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+    }
+  }
+
+  String _getInitials(User? user) {
+    if (user == null) return '?';
+
+    final firstName = user.firstName;
+    final lastName = user.lastName;
+
+    if (firstName.isEmpty && lastName.isEmpty) return '?';
+    if (firstName.isEmpty) return lastName[0].toUpperCase();
+    if (lastName.isEmpty) return firstName[0].toUpperCase();
+
+    return '${firstName[0]}${lastName[0]}'.toUpperCase();
+  }
+
+  void _openAttachment(MessageAttachment attachment) {
+    // Implementation of _openAttachment method
+  }
+
+  Future<void> _showDeleteDialog(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Supprimer le message'),
+        content: const Text('Voulez-vous vraiment supprimer ce message ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text(
+              'Supprimer',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final provider = Provider.of<MessagingProvider>(context, listen: false);
+      await provider.deleteMessage(message.discussionId, message.id);
     }
   }
 }

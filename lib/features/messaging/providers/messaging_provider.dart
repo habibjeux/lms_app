@@ -4,9 +4,16 @@ import '../../auth/models/user.dart';
 import '../../../core/services/messaging_sync_service.dart';
 import '../models/discussion.dart';
 import '../models/message.dart';
+import 'dart:async';
+import '../../../core/network/api_client.dart';
+import '../../auth/data/auth_repository.dart';
 
 class MessagingProvider with ChangeNotifier {
-  final MessagingSyncService _syncService = MessagingSyncService();
+  final MessagingSyncService _syncService = MessagingSyncService(
+    ApiClient.uploadInstance,
+    AuthRepository(),
+  );
+  Timer? _syncTimer;
 
   List<Discussion> _discussions = [];
   Discussion? _currentDiscussion;
@@ -17,6 +24,26 @@ class MessagingProvider with ChangeNotifier {
   bool _isSyncing = false;
   String? _error;
   int _unreadCount = 0;
+  int _pendingMessagesCount = 0;
+
+  MessagingProvider() {
+    _startAutoSync();
+  }
+
+  @override
+  void dispose() {
+    _syncTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startAutoSync() {
+    // Synchroniser toutes les 30 secondes
+    _syncTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (!_isSyncing) {
+        syncPendingMessages();
+      }
+    });
+  }
 
   // Getters
   List<Discussion> get discussions => _discussions;
@@ -29,9 +56,6 @@ class MessagingProvider with ChangeNotifier {
   String? get error => _error;
   int get unreadCount => _unreadCount;
   int get pendingMessagesCount => _pendingMessagesCount;
-
-  // Variable privée pour le nombre de messages en attente
-  int _pendingMessagesCount = 0;
 
   // Charge toutes les discussions
   Future<void> loadDiscussions() async {
@@ -56,6 +80,7 @@ class MessagingProvider with ChangeNotifier {
     _clearError();
 
     try {
+      // Charger les messages depuis le cache d'abord
       _messages = await _syncService.getMessages(discussionId);
 
       // Mettre à jour la discussion courante
@@ -72,9 +97,23 @@ class MessagingProvider with ChangeNotifier {
         );
       }
 
-      // Rafraîchir les compteurs après avoir chargé les messages
+      // Synchroniser avec le serveur en arrière-plan
+      if (await _syncService.isOnline()) {
+        final serverMessages =
+            await _syncService.getMessagesFromServer(discussionId);
+        if (serverMessages.isNotEmpty) {
+          _messages = serverMessages;
+        }
+      }
+
+      // Trier les messages par date de création (du plus ancien au plus récent)
+      _messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+      // Rafraîchir les compteurs
       await _refreshUnreadCount();
       await _refreshPendingCount();
+
+      notifyListeners();
     } catch (e) {
       _setError('Impossible de charger les messages');
       debugPrint('Erreur dans loadMessages: $e');
@@ -169,6 +208,9 @@ class MessagingProvider with ChangeNotifier {
 
         // Rafraîchir les compteurs car on a peut-être ajouté un message en attente
         await _refreshPendingCount();
+
+        // Attendre un court instant pour s'assurer que l'état est mis à jour
+        await Future.delayed(const Duration(milliseconds: 100));
       }
 
       return message;
@@ -218,6 +260,27 @@ class MessagingProvider with ChangeNotifier {
       _setError('Erreur lors de la recherche d\'utilisateurs');
       debugPrint('Erreur dans searchUsers: $e');
       return [];
+    }
+  }
+
+  // Supprime un message
+  Future<bool> deleteMessage(String discussionId, String messageId) async {
+    _clearError();
+
+    try {
+      final success = await _syncService.deleteMessage(discussionId, messageId);
+
+      if (success) {
+        // Mettre à jour la liste des messages localement
+        _messages.removeWhere((m) => m.id == messageId);
+        notifyListeners();
+      }
+
+      return success;
+    } catch (e) {
+      _setError('Impossible de supprimer le message');
+      debugPrint('Erreur dans deleteMessage: $e');
+      return false;
     }
   }
 
@@ -273,14 +336,14 @@ class MessagingProvider with ChangeNotifier {
   }
 
   void _addMessageLocally(Message message) {
-    // Ajouter le message à la liste des messages
-    _messages = [message, ..._messages];
+    // Ajouter le message à la fin de la liste des messages
+    _messages = [..._messages, message];
 
     // Mettre à jour la discussion courante
     if (_currentDiscussion != null) {
       _currentDiscussion = _currentDiscussion!.copyWith(
         lastMessageAt: DateTime.now(),
-        messages: [message, ...(_currentDiscussion!.messages)],
+        messages: [...(_currentDiscussion!.messages), message],
       );
     }
 
@@ -311,5 +374,22 @@ class MessagingProvider with ChangeNotifier {
   bool isDiscussionNew(Discussion discussion) {
     return discussion.lastMessageAt
         .isAfter(DateTime.now().subtract(const Duration(days: 1)));
+  }
+
+  Future<void> loadMoreMessages(String discussionId, int page) async {
+    _setLoadingMessages(true);
+    _clearError();
+
+    try {
+      final newMessages =
+          await _syncService.getMessages(discussionId, page: page);
+      _messages = [..._messages, ...newMessages];
+      notifyListeners();
+    } catch (e) {
+      _setError('Impossible de charger plus de messages');
+      debugPrint('Erreur dans loadMoreMessages: $e');
+    } finally {
+      _setLoadingMessages(false);
+    }
   }
 }

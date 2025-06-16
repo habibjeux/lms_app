@@ -11,7 +11,6 @@ import '../../models/assignment.dart';
 import '../../providers/activity_provider.dart';
 import '../../../quizzes/presentation/screens/quiz_detail_screen.dart';
 import '../screens/activity_detail_screen.dart';
-import 'package:timeago/timeago.dart' as timeago;
 
 class ActivityListItem extends StatelessWidget {
   final Activity activity;

@@ -1,4 +1,6 @@
 import 'package:lms_app/features/auth/models/user.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter/foundation.dart';
 
 class Message {
   final String id;
@@ -33,28 +35,30 @@ class Message {
 
   factory Message.fromJson(Map<String, dynamic> json) {
     var attachments = <MessageAttachment>[];
-    print("attachments$attachments");
     if (json['attachments'] != null) {
       attachments = (json['attachments'] as List)
           .map((attachment) => MessageAttachment.fromJson(attachment))
           .toList();
     }
-    print("attachments$attachments");
+
     return Message(
-      id: json['id'],
+      id: json['id'] ?? '',
       content: json['content'] ?? '',
       senderId: json['senderId'] ?? '',
       receiverId: json['receiverId'] ?? '',
       readAt: json['readAt'] != null ? DateTime.parse(json['readAt']) : null,
-      createdAt: DateTime.parse(json['createdAt']),
-      updatedAt:
-          json['updatedAt'] != null ? DateTime.parse(json['updatedAt']) : null,
-      discussionId: json['discussionId'],
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : DateTime.now(),
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'])
+          : DateTime.now(),
+      discussionId: json['discussionId'] ?? '',
       sender: json['sender'] != null ? User.fromJson(json['sender']) : null,
       receiver:
           json['receiver'] != null ? User.fromJson(json['receiver']) : null,
       attachments: attachments,
-      localId: json['localId'] ?? '',
+      localId: json['localId'],
       status: json['status'] ?? 'sent',
     );
   }
@@ -159,11 +163,26 @@ class MessageAttachment {
   });
 
   factory MessageAttachment.fromJson(Map<String, dynamic> json) {
+    final baseUrl = dotenv.env['SERVER_URL'] ?? '';
+    final fileUrl = json['fileUrl'] ?? '';
+
+    // Vérifier si l'URL est déjà complète ou relative
+    String fullUrl;
+    if (fileUrl.startsWith('http')) {
+      fullUrl = fileUrl;
+    } else if (fileUrl.startsWith('/')) {
+      fullUrl = '$baseUrl$fileUrl';
+    } else {
+      fullUrl = '$baseUrl/$fileUrl';
+    }
+
+    debugPrint('URL de la pièce jointe: $fullUrl');
+
     return MessageAttachment(
       id: json['id'] ?? '',
       messageId: json['messageId'] ?? '',
       filename: json['filename'] ?? '',
-      fileUrl: json['fileUrl'] ?? '',
+      fileUrl: fullUrl,
       fileSize: json['fileSize'] ?? 0,
       mimeType: json['mimeType'] ?? '',
       createdAt: DateTime.parse(json['createdAt']),
@@ -181,7 +200,8 @@ class MessageAttachment {
       id: 'local_${DateTime.now().millisecondsSinceEpoch}_$filename',
       messageId: 'pending',
       filename: filename,
-      fileUrl: '',
+      fileUrl:
+          localPath, // Pour les fichiers locaux, on utilise le chemin local
       fileSize: fileSize,
       mimeType: mimeType,
       createdAt: DateTime.now(),
@@ -205,4 +225,5 @@ class MessageAttachment {
   bool get isImage => mimeType.startsWith('image/');
   bool get isPdf => mimeType == 'application/pdf';
   bool get isLocal => localPath != null && localPath!.isNotEmpty;
+  bool get isRemote => !isLocal && fileUrl.startsWith('http');
 }

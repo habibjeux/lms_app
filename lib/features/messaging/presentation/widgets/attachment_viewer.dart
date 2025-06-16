@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:dio/dio.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../models/message.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AttachmentViewer extends StatefulWidget {
   final MessageAttachment attachment;
@@ -19,6 +20,7 @@ class _AttachmentViewerState extends State<AttachmentViewer> {
   bool _isLoading = false;
   String? _localPath;
   final Dio _dio = Dio();
+  double? _downloadProgress;
 
   @override
   void initState() {
@@ -63,16 +65,32 @@ class _AttachmentViewerState extends State<AttachmentViewer> {
       return filePath;
     }
 
-    // Télécharger le fichier
-    await _dio.download(
-      widget.attachment.fileUrl,
-      filePath,
-      onReceiveProgress: (received, total) {
-        // Option: Afficher une progress bar
-      },
-    );
+    try {
+      final baseUrl = dotenv.env['SERVER_URL'] ?? '';
+      final fullUrl = widget.attachment.fileUrl.startsWith('http')
+          ? widget.attachment.fileUrl
+          : '$baseUrl${widget.attachment.fileUrl}';
 
-    return filePath;
+      debugPrint('Téléchargement de: $fullUrl');
+
+      // Télécharger le fichier
+      await _dio.download(
+        fullUrl,
+        filePath,
+        onReceiveProgress: (received, total) {
+          if (total != -1) {
+            setState(() {
+              _downloadProgress = received / total;
+            });
+          }
+        },
+      );
+
+      return filePath;
+    } catch (e) {
+      debugPrint('Erreur lors du téléchargement: $e');
+      rethrow;
+    }
   }
 
   Future<void> _shareAttachment() async {
@@ -98,15 +116,44 @@ class _AttachmentViewerState extends State<AttachmentViewer> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const CircularProgressIndicator(),
+                  if (_downloadProgress != null) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      '${(_downloadProgress! * 100).toStringAsFixed(1)}%',
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                  ],
+                ],
+              ),
+            )
           : _buildAttachmentView(),
     );
   }
 
   Widget _buildAttachmentView() {
     if (_localPath == null) {
-      return const Center(
-        child: Text('Impossible de charger la pièce jointe'),
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const SizedBox(height: 16),
+            const Text(
+              'Impossible de charger la pièce jointe',
+              style: TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            ElevatedButton(
+              onPressed: _prepareAttachment,
+              child: const Text('Réessayer'),
+            ),
+          ],
+        ),
       );
     }
 
@@ -126,7 +173,27 @@ class _AttachmentViewerState extends State<AttachmentViewer> {
       child: InteractiveViewer(
         minScale: 0.5,
         maxScale: 3.0,
-        child: Image.file(imageFile),
+        child: Image.file(
+          imageFile,
+          errorBuilder: (context, error, stackTrace) {
+            return Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.broken_image, size: 48, color: Colors.red),
+                const SizedBox(height: 16),
+                const Text(
+                  'Impossible de charger l\'image',
+                  style: TextStyle(fontSize: 16),
+                ),
+                const SizedBox(height: 8),
+                ElevatedButton(
+                  onPressed: _prepareAttachment,
+                  child: const Text('Réessayer'),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -143,10 +210,20 @@ class _AttachmentViewerState extends State<AttachmentViewer> {
       fitPolicy: FitPolicy.BOTH,
       preventLinkNavigation: false,
       onError: (error) {
-        print('Error: $error');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors du chargement du PDF: $error'),
+            backgroundColor: Colors.red,
+          ),
+        );
       },
       onPageError: (page, error) {
-        print('Error on page $page: $error');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur sur la page $page: $error'),
+            backgroundColor: Colors.red,
+          ),
+        );
       },
     );
   }

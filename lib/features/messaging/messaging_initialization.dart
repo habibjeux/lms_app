@@ -4,12 +4,17 @@ import 'package:hive/hive.dart';
 import 'providers/messaging_provider.dart';
 import 'presentation/screens/discussions_screen.dart';
 import '../../core/services/messaging_sync_service.dart';
+import '../../core/network/api_client.dart';
+import '../../features/auth/data/auth_repository.dart';
 
 /// Cette classe s'occupe de l'initialisation de la messagerie
 /// et fournit des méthodes utilitaires pour accéder aux fonctionnalités de messagerie.
 class MessagingInitialization {
   static bool _initialized = false;
-  static final MessagingSyncService _syncService = MessagingSyncService();
+  static final MessagingSyncService _syncService = MessagingSyncService(
+    ApiClient.uploadInstance,
+    AuthRepository(),
+  );
 
   /// Initialise les composants nécessaires pour la messagerie.
   /// À appeler dans le main.dart après l'initialisation de Hive.

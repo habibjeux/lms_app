@@ -1,15 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../../core/providers/connectivity_provider.dart';
-import '../../../../core/widgets/buttons/download_button.dart';
-import '../../../../core/widgets/loading_indicator.dart';
 import '../../models/module.dart';
 import '../../providers/modules_provider.dart';
 import '../widgets/chapter_widget.dart';
 import '../widgets/module_activity.dart';
 import '../../../../core/services/sync_service.dart';
 import '../screens/downloads_screen.dart';
-import '../widgets/chapter_list_item.dart';
 
 class ModuleDetailScreen extends StatefulWidget {
   final Module module;
@@ -130,7 +126,7 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
                               provider.toggleChapterExpansion(chapter.id);
                             },
                           );
-                        }).toList(),
+                        }),
                       if (provider.moduleActivities.isNotEmpty)
                         ModuleActivitiesSection(
                           activities: provider.moduleActivities,

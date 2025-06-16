@@ -1,5 +1,4 @@
 import 'package:intl/intl.dart';
-import 'package:timeago/timeago.dart' as timeago;
 
 class DateHelper {
   static String getFormattedActivityDate(DateTime? date,

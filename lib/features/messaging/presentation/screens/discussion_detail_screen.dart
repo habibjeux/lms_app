@@ -8,7 +8,6 @@ import '../../../auth/providers/auth_provider.dart';
 import '../../providers/messaging_provider.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/attachment_preview.dart';
-import '../../../../core/widgets/connectivity/offline_banner.dart';
 import '../../../../core/widgets/inputs/expandable_text_field.dart';
 
 class DiscussionDetailScreen extends StatefulWidget {
@@ -26,32 +25,61 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen> {
   final List<File> _selectedFiles = [];
   bool _isComposing = false;
   bool _isInitialized = false;
+  static const int _pageSize = 20;
+  int _currentPage = 1;
+  bool _isLoadingMore = false;
+  bool _hasMoreMessages = true;
 
   @override
   void initState() {
     super.initState();
-    _messageController.addListener(_handleTextChange);
-    // Utiliser un Future.microtask pour éviter les appels d'état pendant le build
-    Future.microtask(() => _loadMessages());
+    _messageController.addListener(_onMessageChanged);
+    _scrollController.addListener(_onScroll);
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Recharger les messages à chaque changement de dépendances (navigation)
-    _loadMessages();
+    if (!_isInitialized) {
+      _loadMessages();
+      _isInitialized = true;
+    }
   }
 
   @override
   void dispose() {
-    _messageController.removeListener(_handleTextChange);
+    _messageController.removeListener(_onMessageChanged);
     _scrollController.dispose();
     _messageController.dispose();
     super.dispose();
   }
 
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent * 0.8) {
+      _loadMoreMessages();
+    }
+  }
+
+  Future<void> _loadMoreMessages() async {
+    if (_isLoadingMore || !_hasMoreMessages) return;
+
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    final provider = Provider.of<MessagingProvider>(context, listen: false);
+    await provider.loadMoreMessages(widget.discussionId, _currentPage + 1);
+
+    setState(() {
+      _currentPage++;
+      _isLoadingMore = false;
+      _hasMoreMessages = provider.messages.length >= _pageSize * _currentPage;
+    });
+  }
+
   // Séparer la logique de changement de texte pour réduire les reconstructions
-  void _handleTextChange() {
+  void _onMessageChanged() {
     final newIsComposing =
         _messageController.text.trim().isNotEmpty || _selectedFiles.isNotEmpty;
     if (_isComposing != newIsComposing) {
@@ -67,11 +95,7 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen> {
     final provider = Provider.of<MessagingProvider>(context, listen: false);
     await provider.loadMessages(widget.discussionId);
 
-    if (mounted) {
-      setState(() {
-        _isInitialized = true;
-      });
-    }
+    if (!mounted) return;
 
     // Utiliser un délai plus long pour s'assurer que le rendu est complet
     Future.delayed(const Duration(milliseconds: 300), () {
@@ -119,53 +143,47 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen> {
 
     // Capturer les fichiers actuels et effacer la liste avant d'envoyer
     final filesToSend = List<File>.from(_selectedFiles);
-    setState(() {
-      _selectedFiles.clear();
-      _isComposing = false;
-    });
+
+    // Mettre à jour l'état avant l'envoi
+    if (mounted) {
+      setState(() {
+        _selectedFiles.clear();
+        _isComposing = false;
+      });
+    }
 
     final provider = Provider.of<MessagingProvider>(context, listen: false);
 
     try {
       if (filesToSend.isNotEmpty) {
-        // Envoyer un message avec pièces jointes
         await provider.sendMessageWithAttachments(
           widget.discussionId,
           textContent,
           filesToSend,
         );
       } else {
-        // Envoyer un message texte
         await provider.sendMessage(
           widget.discussionId,
           textContent,
         );
       }
 
-      // Forcer un reload des messages pour s'assurer que l'UI est à jour
-      if (mounted) {
-        // Délai légèrement plus long pour s'assurer que le backend a traité le message
-        Future.delayed(const Duration(milliseconds: 500), () async {
-          if (mounted) {
-            // Recharger les messages pour s'assurer qu'ils sont à jour
-            await provider.loadMessages(widget.discussionId);
+      // Attendre que le message soit envoyé avant de recharger
+      await Future.delayed(const Duration(milliseconds: 500));
 
-            // Attendre encore un peu que l'UI se mette à jour avant de défiler
-            Future.delayed(const Duration(milliseconds: 200), () {
-              if (mounted) {
-                _scrollToBottom();
-              }
-            });
-          }
-        });
+      if (mounted) {
+        await provider.loadMessages(widget.discussionId);
+        _scrollToBottom();
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erreur lors de l\'envoi du message: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors de l\'envoi du message: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -255,171 +273,69 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Consumer<MessagingProvider>(
-          builder: (context, provider, child) {
-            final discussion = provider.currentDiscussion;
-            if (discussion == null) return const Text('Chargement...');
+    return Consumer<MessagingProvider>(
+      builder: (context, provider, child) {
+        final messages = provider.messages;
 
-            final otherParticipant = discussion.getOtherParticipant(
-                Provider.of<AuthProvider>(context, listen: false).user?.id ??
-                    '');
-            return Text(
-                '${otherParticipant['firstName']} ${otherParticipant['lastName']}');
-          },
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            onPressed: () {
-              showModalBottomSheet(
-                context: context,
-                builder: (context) {
-                  final discussion =
-                      Provider.of<MessagingProvider>(context).currentDiscussion;
-                  if (discussion == null) return const SizedBox();
-
-                  final otherParticipant = discussion.getOtherParticipant(
-                      Provider.of<AuthProvider>(context, listen: false)
-                              .user
-                              ?.id ??
-                          '');
-                  return ListTile(
-                    title: Text(
-                        '${otherParticipant['firstName']} ${otherParticipant['lastName']}'),
-                    subtitle: Text(otherParticipant['email']),
-                  );
-                },
-              );
-            },
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(_getOtherParticipantName(context)),
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          const OfflineBanner(),
-          Expanded(
-            child: Consumer<MessagingProvider>(
-              builder: (context, provider, child) {
-                if (provider.isLoadingMessages && !_isInitialized) {
-                  return const Center(
-                    child: CircularProgressIndicator(),
-                  );
-                }
-
-                if (provider.error != null) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          provider.error!,
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _loadMessages,
-                          child: const Text('Réessayer'),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                final messages = provider.messages;
-                if (messages.isEmpty && !provider.isLoadingMessages) {
-                  return const Center(
-                    child: Text('Aucun message. Commencez la conversation!'),
-                  );
-                }
-
-                final currentUserId =
-                    Provider.of<AuthProvider>(context, listen: false)
-                            .user
-                            ?.id ??
-                        '';
-
-                // Défiler vers le bas si des messages ont été ajoutés
-                // Supprimer le défilement automatique ici car il peut interférer
-                // avec les autres mécanismes de défilement
-
-                return GestureDetector(
-                  onTap: () => FocusScope.of(context).unfocus(),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                    child: Stack(
-                      children: [
-                        RefreshIndicator(
-                          onRefresh: _loadMessages,
-                          child: ListView.builder(
-                            controller: _scrollController,
-                            reverse: false,
-                            itemCount: messages.length,
-                            itemBuilder: (context, index) {
-                              final message = messages[index];
-                              final isMe = message.senderId == currentUserId;
-
-                              // Vérifier si on doit afficher la date - correction de la logique
-                              bool showDate = true;
-                              if (index > 0) {
-                                final prevMessage = messages[index - 1];
-
-                                // S'assurer que les dates sont valides
-                                final prevDate = DateTime(
-                                  prevMessage.createdAt.year,
-                                  prevMessage.createdAt.month,
-                                  prevMessage.createdAt.day,
-                                );
-                                final currentDate = DateTime(
-                                  message.createdAt.year,
-                                  message.createdAt.month,
-                                  message.createdAt.day,
-                                );
-                                showDate =
-                                    !prevDate.isAtSameMomentAs(currentDate);
-                              }
-
-                              return Column(
-                                children: [
-                                  if (showDate)
-                                    _buildDateSeparator(message.createdAt),
-                                  MessageBubble(
-                                    message: message,
-                                    isMe: isMe,
-                                    isPending: message.status == 'pending',
-                                    isError: message.status == 'error',
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                        ),
-                        if (provider.isLoadingMessages && _isInitialized)
-                          const Positioned(
-                            top: 8,
-                            left: 0,
-                            right: 0,
-                            child: Center(
-                              child: SizedBox(
-                                width: 24,
-                                height: 24,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2.0),
-                              ),
+          body: Column(
+            children: [
+              Expanded(
+                child: Stack(
+                  children: [
+                    ListView.builder(
+                      controller: _scrollController,
+                      reverse: true,
+                      cacheExtent: 1000,
+                      itemCount: messages.length + (_hasMoreMessages ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index == messages.length) {
+                          return const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(8.0),
+                              child: CircularProgressIndicator(),
                             ),
-                          ),
-                      ],
+                          );
+                        }
+
+                        // Inverser l'index pour afficher les messages du plus récent au plus ancien
+                        final reversedIndex = messages.length - 1 - index;
+                        final message = messages[reversedIndex];
+
+                        final isMe = message.senderId ==
+                            Provider.of<AuthProvider>(context, listen: false)
+                                .user
+                                ?.id;
+                        final showDate = reversedIndex == 0 ||
+                            !_isSameDay(message.createdAt,
+                                messages[reversedIndex - 1].createdAt);
+
+                        return Column(
+                          children: [
+                            if (showDate)
+                              _buildDateSeparator(message.createdAt),
+                            MessageBubble(
+                              key: ValueKey(message.id),
+                              message: message,
+                              isMe: isMe,
+                              isPending: message.status == 'pending',
+                              isError: message.status == 'error',
+                            ),
+                          ],
+                        );
+                      },
                     ),
-                  ),
-                );
-              },
-            ),
+                  ],
+                ),
+              ),
+              _buildMessageComposer(),
+            ],
           ),
-          if (_selectedFiles.isNotEmpty) _buildAttachmentPreview(),
-          _buildMessageComposer(),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -559,5 +475,21 @@ class _DiscussionDetailScreenState extends State<DiscussionDetailScreen> {
         );
       },
     );
+  }
+
+  bool _isSameDay(DateTime date1, DateTime date2) {
+    return date1.year == date2.year &&
+        date1.month == date2.month &&
+        date1.day == date2.day;
+  }
+
+  String _getOtherParticipantName(BuildContext context) {
+    final discussion =
+        Provider.of<MessagingProvider>(context).currentDiscussion;
+    if (discussion == null) return 'Chargement...';
+
+    final otherParticipant = discussion.getOtherParticipant(
+        Provider.of<AuthProvider>(context, listen: false).user?.id ?? '');
+    return '${otherParticipant['firstName']} ${otherParticipant['lastName']}';
   }
 }

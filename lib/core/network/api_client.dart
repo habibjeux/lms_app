@@ -37,7 +37,7 @@ class ApiClient {
   static Dio get downloadInstance {
     _downloadDio ??= Dio(
       BaseOptions(
-        baseUrl: baseUrl + '/public',
+        baseUrl: '$baseUrl/public',
         connectTimeout: const Duration(seconds: 30),
         receiveTimeout: const Duration(seconds: 30),
         headers: {

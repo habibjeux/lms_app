@@ -4,7 +4,6 @@ import '../../../auth/providers/auth_provider.dart';
 import '../../providers/messaging_provider.dart';
 import '../widgets/discussion_list_item.dart';
 import '../widgets/new_discussion_button.dart';
-import '../widgets/sync_indicator.dart';
 import '../../../../core/widgets/connectivity/offline_banner.dart';
 import 'discussion_detail_screen.dart';
 import 'new_discussion_screen.dart';
@@ -80,17 +79,6 @@ class _DiscussionsScreenState extends State<DiscussionsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Messages'),
-        actions: [
-          Consumer<MessagingProvider>(
-            builder: (context, provider, child) {
-              return SyncIndicator(
-                pendingCount: provider.pendingMessagesCount,
-                isSyncing: provider.isSyncing,
-                onPressed: _syncPendingMessages,
-              );
-            },
-          ),
-        ],
       ),
       body: Column(
         children: [

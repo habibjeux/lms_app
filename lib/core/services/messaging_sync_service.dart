@@ -10,15 +10,20 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:mime/mime.dart';
 
+import '../../features/auth/models/user.dart';
 import '../../features/messaging/models/discussion.dart';
 import '../../features/messaging/models/message.dart';
 import '../network/api_client.dart';
 import 'offline_storage_service.dart';
+import '../../features/auth/data/auth_repository.dart';
+import 'storage_service.dart';
 
 class MessagingSyncService {
   final OfflineStorageService _storage = OfflineStorageService();
   final Dio _api = ApiClient.instance;
-  final Dio _uploadApi = ApiClient.uploadInstance;
+  final Dio _uploadApi;
+  final AuthRepository _authRepository;
+  final StorageService _storageService = StorageService();
   bool _isSyncing = false;
 
   // Constantes pour le stockage
@@ -27,6 +32,8 @@ class MessagingSyncService {
   static const String pendingMessagesBoxName = 'pending_messages';
   static const String pendingAttachmentsBoxName = 'pending_attachments';
   static const String lastSyncBoxName = 'lastSync';
+
+  MessagingSyncService(this._uploadApi, this._authRepository);
 
   bool get isSyncing => _isSyncing;
 
@@ -62,35 +69,23 @@ class MessagingSyncService {
   }
 
   // Récupère les messages d'une discussion spécifique
-  Future<List<Message>> getMessages(String discussionId) async {
+  Future<List<Message>> getMessages(String discussionId, {int page = 1}) async {
     try {
-      if (await isOnline()) {
-        final response = await _api.get('/discussions/$discussionId/messages');
-        final List<Message> messages = (response.data as List)
-            .map((item) => Message.fromJson(item))
-            .toList();
+      final messages = await _getMessagesFromCache(discussionId);
+      final startIndex = (page - 1) * 20;
+      final endIndex = startIndex + 20;
 
-        // Sauvegarder dans le cache
-        await _saveMessagesToCache(discussionId, messages);
-
-        // Marquer les messages comme lus
-        await _api.patch('/discussions/$discussionId/read');
-
-        // Fusionner avec les messages en attente
-        final pendingMessages = await _getPendingMessages(discussionId);
-        return [...messages, ...pendingMessages];
+      if (startIndex >= messages.length) {
+        return [];
       }
 
-      // Si hors ligne, utiliser les données en cache et les messages en attente
-      final cachedMessages = await _getMessagesFromCache(discussionId);
-      final pendingMessages = await _getPendingMessages(discussionId);
-      return [...cachedMessages, ...pendingMessages];
+      return messages.sublist(
+        startIndex,
+        endIndex > messages.length ? messages.length : endIndex,
+      );
     } catch (e) {
       debugPrint('Erreur lors de la récupération des messages: $e');
-      // En cas d'erreur, essayer de récupérer depuis le cache et les messages en attente
-      final cachedMessages = await _getMessagesFromCache(discussionId);
-      final pendingMessages = await _getPendingMessages(discussionId);
-      return [...cachedMessages, ...pendingMessages];
+      return [];
     }
   }
 
@@ -149,7 +144,22 @@ class MessagingSyncService {
           'content': content,
         });
 
-        final message = Message.fromJson(response.data);
+        if (response.data == null) {
+          throw Exception('Réponse invalide du serveur');
+        }
+
+        // S'assurer que tous les champs requis sont présents
+        final messageData = response.data as Map<String, dynamic>;
+        messageData['content'] = messageData['content'] ?? content;
+        messageData['senderId'] = messageData['senderId'] ?? '';
+        messageData['receiverId'] = messageData['receiverId'] ?? '';
+        messageData['discussionId'] =
+            messageData['discussionId'] ?? discussionId;
+        messageData['createdAt'] =
+            messageData['createdAt'] ?? DateTime.now().toIso8601String();
+        messageData['attachments'] = messageData['attachments'] ?? [];
+
+        final message = Message.fromJson(messageData);
 
         // Sauvegarder dans le cache
         await _addMessageToCache(discussionId, message);
@@ -198,7 +208,22 @@ class MessagingSyncService {
           data: formData,
         );
 
-        final message = Message.fromJson(response.data);
+        if (response.data == null) {
+          throw Exception('Réponse invalide du serveur');
+        }
+
+        // S'assurer que tous les champs requis sont présents
+        final messageData = response.data as Map<String, dynamic>;
+        messageData['content'] = messageData['content'] ?? content;
+        messageData['senderId'] = messageData['senderId'] ?? '';
+        messageData['receiverId'] = messageData['receiverId'] ?? '';
+        messageData['discussionId'] =
+            messageData['discussionId'] ?? discussionId;
+        messageData['createdAt'] =
+            messageData['createdAt'] ?? DateTime.now().toIso8601String();
+        messageData['attachments'] = messageData['attachments'] ?? [];
+
+        final message = Message.fromJson(messageData);
 
         // Sauvegarder dans le cache
         await _addMessageToCache(discussionId, message);
@@ -442,13 +467,21 @@ class MessagingSyncService {
     final discussion = await _getDiscussionFromCache(discussionId);
     final receiverId = discussion?.getOtherParticipantId(userId) ?? 'unknown';
 
+    // Créer l'objet User pour l'expéditeur
+    final sender = User.fromJson(userData ?? {});
+
     final localId = const Uuid().v4();
-    final message = Message.pending(
+    final message = Message(
+      id: 'pending_${DateTime.now().millisecondsSinceEpoch}_$localId',
       content: content,
       senderId: userId,
       receiverId: receiverId,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
       discussionId: discussionId,
+      sender: sender,
       localId: localId,
+      status: 'pending',
     );
 
     await box.put(message.id, jsonEncode(message.toJson()));
@@ -467,37 +500,46 @@ class MessagingSyncService {
 
   Future<Message> _createPendingMessageWithAttachments(
       String discussionId, String content, List<File> files) async {
-    // D'abord, sauvegarder les fichiers localement
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final messageId = 'pending_${timestamp}_${const Uuid().v4()}';
     final attachments = <MessageAttachment>[];
 
-    for (final file in files) {
-      final filename = path.basename(file.path);
-      final mimeType = lookupMimeType(file.path) ?? 'application/octet-stream';
-      final fileSize = await file.length();
-
-      // Copier le fichier dans un dossier temporaire
-      final tempDir = await getTemporaryDirectory();
-      final attachmentsDir = Directory('${tempDir.path}/message_attachments');
-      if (!await attachmentsDir.exists()) {
-        await attachmentsDir.create(recursive: true);
-      }
-
-      final localFilePath =
-          '${attachmentsDir.path}/${const Uuid().v4()}_$filename';
-      await file.copy(localFilePath);
-
-      final attachment = MessageAttachment.fromLocalFile(
-        localPath: localFilePath,
-        filename: filename,
-        fileSize: fileSize,
-        mimeType: mimeType,
-      );
-
-      attachments.add(attachment);
+    // Créer le répertoire temporaire s'il n'existe pas
+    final tempDir = await getTemporaryDirectory();
+    final messageAttachmentsDir =
+        Directory('${tempDir.path}/message_attachments');
+    if (!await messageAttachmentsDir.exists()) {
+      await messageAttachmentsDir.create(recursive: true);
     }
 
-    // Créer le message en attente avec les pièces jointes
-    final box = await _openBox(pendingMessagesBoxName);
+    for (var file in files) {
+      final filename = path.basename(file.path);
+      final extension = path.extension(filename);
+      final mimeType = lookupMimeType(filename) ?? 'application/octet-stream';
+      final isImage = mimeType.startsWith('image/');
+      final uniqueFilename = '${timestamp}_${const Uuid().v4()}_$filename';
+
+      // Copier le fichier dans le répertoire temporaire
+      final targetPath = '${messageAttachmentsDir.path}/$uniqueFilename';
+      await file.copy(targetPath);
+
+      // Vérifier que le fichier a bien été copié
+      final copiedFile = File(targetPath);
+      if (!await copiedFile.exists()) {
+        throw Exception('Erreur lors de la copie du fichier: $filename');
+      }
+
+      attachments.add(MessageAttachment(
+        id: const Uuid().v4(),
+        messageId: messageId,
+        filename: filename,
+        fileSize: await file.length(),
+        mimeType: mimeType,
+        fileUrl: '', // L'URL sera mise à jour après l'envoi réussi
+        localPath: targetPath,
+        createdAt: DateTime.now(),
+      ));
+    }
 
     // Récupérer l'ID utilisateur depuis le stockage
     final userBox = await Hive.openBox('user');
@@ -508,26 +550,24 @@ class MessagingSyncService {
     final discussion = await _getDiscussionFromCache(discussionId);
     final receiverId = discussion?.getOtherParticipantId(userId) ?? 'unknown';
 
-    final localId = const Uuid().v4();
-    final message = Message.pending(
+    // Créer l'objet User pour l'expéditeur
+    final sender = User.fromJson(userData ?? {});
+
+    final message = Message(
+      id: messageId,
       content: content,
       senderId: userId,
       receiverId: receiverId,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
       discussionId: discussionId,
+      sender: sender,
       attachments: attachments,
-      localId: localId,
+      status: 'pending',
     );
 
-    await box.put(message.id, jsonEncode(message.toJson()));
-
-    // Mettre à jour la discussion si elle existe
-    if (discussion != null) {
-      final updatedDiscussion = discussion.copyWith(
-        lastMessageAt: DateTime.now(),
-        messages: [message, ...discussion.messages],
-      );
-      await _saveDiscussionToCache(updatedDiscussion);
-    }
+    // Sauvegarder dans le cache
+    await _addMessageToCache(discussionId, message);
 
     return message;
   }
@@ -723,6 +763,89 @@ class MessagingSyncService {
     } catch (e) {
       debugPrint('Erreur lors du calcul des messages non lus: $e');
       return 0;
+    }
+  }
+
+  Future<List<Message>> getMessagesFromServer(String discussionId) async {
+    try {
+      if (!await isOnline()) return [];
+
+      final response = await _api.get('/discussions/$discussionId/messages');
+      final List<Message> messages = (response.data as List)
+          .map((item) => Message.fromJson(item))
+          .toList();
+
+      // Sauvegarder dans le cache
+      await _saveMessagesToCache(discussionId, messages);
+
+      // Marquer les messages comme lus
+      await _api.patch('/discussions/$discussionId/read');
+
+      // Fusionner avec les messages en attente
+      final pendingMessages = await _getPendingMessages(discussionId);
+      return [...messages, ...pendingMessages];
+    } catch (e) {
+      debugPrint('Erreur lors de la récupération des messages du serveur: $e');
+      return [];
+    }
+  }
+
+  // Supprime un message
+  Future<bool> deleteMessage(String discussionId, String messageId) async {
+    if (await isOnline()) {
+      try {
+        await _api.delete('/discussions/$discussionId/messages/$messageId');
+
+        // Supprimer du cache
+        await _removeMessageFromCache(discussionId, messageId);
+        return true;
+      } catch (e) {
+        debugPrint('Erreur lors de la suppression du message: $e');
+        return false;
+      }
+    } else {
+      // En mode hors ligne, on marque simplement le message comme supprimé
+      await _markMessageAsDeleted(discussionId, messageId);
+      return true;
+    }
+  }
+
+  Future<void> _markMessageAsDeleted(
+      String discussionId, String messageId) async {
+    final box = await _openBox(messagesBoxName);
+    final existingData = box.get(discussionId);
+
+    if (existingData != null) {
+      final messages = (jsonDecode(existingData) as List)
+          .map((item) => Message.fromJson(item))
+          .toList();
+
+      final index = messages.indexWhere((m) => m.id == messageId);
+      if (index >= 0) {
+        final updatedMessage = messages[index].copyWith(
+          status: 'deleted',
+          content: 'Ce message a été supprimé',
+        );
+        messages[index] = updatedMessage;
+        await box.put(
+            discussionId, jsonEncode(messages.map((m) => m.toJson()).toList()));
+      }
+    }
+  }
+
+  Future<void> _removeMessageFromCache(
+      String discussionId, String messageId) async {
+    final box = await _openBox(messagesBoxName);
+    final existingData = box.get(discussionId);
+
+    if (existingData != null) {
+      final messages = (jsonDecode(existingData) as List)
+          .map((item) => Message.fromJson(item))
+          .toList();
+
+      messages.removeWhere((m) => m.id == messageId);
+      await box.put(
+          discussionId, jsonEncode(messages.map((m) => m.toJson()).toList()));
     }
   }
 }
