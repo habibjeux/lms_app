@@ -25,30 +25,37 @@ class AssignmentSubmission extends BaseModel {
   });
 
   factory AssignmentSubmission.fromJson(Map<String, dynamic> json) {
-    return AssignmentSubmission(
-      id: json['id'],
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'])
-          : DateTime.now(),
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'])
-          : DateTime.now(),
-      deletedAt:
-          json['deletedAt'] != null ? DateTime.parse(json['deletedAt']) : null,
-      active: json['active'] ?? true,
-      assignmentId: json['assignmentId'],
-      studentId: json['studentId'],
-      submissionDate: json['submissionDate'] != null
-          ? DateTime.parse(json['submissionDate'])
-          : DateTime.now(),
-      files:
-          json['files'] != null ? List<String>.from(json['files']) : const [],
-      comment: json['comment'],
-      isLate: json['isLate'] ?? false,
-      grade: json['grade'] != null
-          ? AssignmentGrade.fromJson(json['grade'])
-          : null,
-    );
+    try {
+      return AssignmentSubmission(
+        id: json['id']?.toString() ?? '',
+        createdAt: json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'])
+            : DateTime.now(),
+        updatedAt: json['updatedAt'] != null
+            ? DateTime.parse(json['updatedAt'])
+            : DateTime.now(),
+        deletedAt: json['deletedAt'] != null
+            ? DateTime.parse(json['deletedAt'])
+            : null,
+        active: json['active'] ?? true,
+        assignmentId: json['assignmentId']?.toString() ?? '',
+        studentId: json['studentId']?.toString() ?? '',
+        submissionDate: json['submissionDate'] != null
+            ? DateTime.parse(json['submissionDate'])
+            : DateTime.now(),
+        files:
+            json['files'] != null ? List<String>.from(json['files']) : const [],
+        comment: json['comment']?.toString(),
+        isLate: json['isLate'] ?? false,
+        grade: json['grade'] != null
+            ? AssignmentGrade.fromJson(json['grade'])
+            : null,
+      );
+    } catch (e) {
+      print("Erreur lors de la conversion de la soumission: $e");
+      print("JSON reçu: $json");
+      rethrow;
+    }
   }
 
   @override
@@ -91,25 +98,34 @@ class AssignmentGrade extends BaseModel {
   });
 
   factory AssignmentGrade.fromJson(Map<String, dynamic> json) {
-    return AssignmentGrade(
-      id: json['id'],
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'])
-          : DateTime.now(),
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'])
-          : DateTime.now(),
-      deletedAt:
-          json['deletedAt'] != null ? DateTime.parse(json['deletedAt']) : null,
-      active: json['active'] ?? true,
-      submissionId: json['submissionId'],
-      teacherId: json['teacherId'],
-      score: _parseScore(json['score']),
-      feedback: json['feedback'],
-      gradedAt: json['gradedDate'] != null
-          ? DateTime.parse(json['gradedDate'])
-          : DateTime.now(),
-    );
+    try {
+      return AssignmentGrade(
+        id: json['id']?.toString() ?? '',
+        createdAt: json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'])
+            : DateTime.now(),
+        updatedAt: json['updatedAt'] != null
+            ? DateTime.parse(json['updatedAt'])
+            : DateTime.now(),
+        deletedAt: json['deletedAt'] != null
+            ? DateTime.parse(json['deletedAt'])
+            : null,
+        active: json['active'] ?? true,
+        submissionId: json['submissionId']?.toString() ?? '',
+        teacherId: json['teacherId']?.toString() ?? '',
+        score: _parseScore(json['score']),
+        feedback: json['feedback']?.toString(),
+        gradedAt: json['gradingDate'] != null
+            ? DateTime.parse(json['gradingDate'])
+            : (json['gradedDate'] != null
+                ? DateTime.parse(json['gradedDate'])
+                : DateTime.now()),
+      );
+    } catch (e) {
+      print("Erreur lors de la conversion de la note: $e");
+      print("JSON reçu: $json");
+      rethrow;
+    }
   }
 
   @override

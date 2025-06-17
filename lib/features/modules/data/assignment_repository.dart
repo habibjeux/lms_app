@@ -9,6 +9,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/exceptions/app_exception.dart';
 import '../../../core/services/offline_storage_service.dart';
+import '../../../core/services/download_storage_service.dart';
 import '../models/assignment_submission.dart';
 import '../models/assignment.dart';
 
@@ -24,7 +25,10 @@ class AssignmentRepository {
       final localData = await _offlineStorage.getAssignment(assignmentId);
       if (localData != null) {
         print('📝 Devoir trouvé localement: $assignmentId');
-        return Assignment.fromJson(localData);
+        // Convertir Map<dynamic, dynamic> vers Map<String, dynamic>
+        final Map<String, dynamic> assignmentData =
+            Map<String, dynamic>.from(localData);
+        return Assignment.fromJson(assignmentData);
       }
 
       // Si pas disponible localement et en ligne, récupérer depuis l'API
@@ -224,7 +228,10 @@ class AssignmentRepository {
 
       for (final submissionData in submissions) {
         if (submissionData['assignmentId'] == assignmentId) {
-          return AssignmentSubmission.fromJson(submissionData);
+          // Convertir Map<dynamic, dynamic> vers Map<String, dynamic>
+          final Map<String, dynamic> data =
+              Map<String, dynamic>.from(submissionData);
+          return AssignmentSubmission.fromJson(data);
         }
       }
       return null;
@@ -239,7 +246,10 @@ class AssignmentRepository {
       final localBox = await Hive.openBox('synchronized_submissions');
       final submissionData = localBox.get(assignmentId);
       if (submissionData != null) {
-        return AssignmentSubmission.fromJson(submissionData);
+        // Convertir Map<dynamic, dynamic> vers Map<String, dynamic>
+        final Map<String, dynamic> data =
+            Map<String, dynamic>.from(submissionData);
+        return AssignmentSubmission.fromJson(data);
       }
       return null;
     } catch (e) {
@@ -279,6 +289,58 @@ class AssignmentRepository {
       return null;
     } catch (e) {
       return null;
+    }
+  }
+
+  // Sauvegarder un devoir dans le cache local
+  Future<void> saveAssignmentToCache(Assignment assignment) async {
+    try {
+      final assignmentsBox = await Hive.openBox('cached_assignments');
+      await assignmentsBox.put(assignment.id, assignment.toJson());
+      print('📝 Devoir sauvegardé dans le cache: ${assignment.id}');
+    } catch (e) {
+      print('Erreur lors de la sauvegarde dans le cache: $e');
+    }
+  }
+
+  // Vérifier si un devoir est téléchargé
+  Future<bool> isAssignmentDownloaded(String assignmentId) async {
+    try {
+      final downloadStorage = DownloadStorageService();
+      return await downloadStorage.isAssignmentDownloaded(assignmentId);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Supprimer une soumission (seulement en ligne)
+  Future<void> deleteSubmission(
+      String submissionId, String assignmentId) async {
+    if (!await _isOnline()) {
+      throw Exception(
+          'La suppression de soumission nécessite une connexion Internet');
+    }
+
+    try {
+      // Utiliser la bonne route avec l'ID de l'assignment et envoyer submissionId dans le body
+      final response = await _api.delete(
+        '/assignments/$assignmentId/my-submission',
+        data: {'submissionId': submissionId},
+      );
+
+      if (response.statusCode != 200 && response.statusCode != 204) {
+        throw Exception(
+            'Erreur lors de la suppression: ${response.statusMessage}');
+      }
+
+      // Supprimer de la boîte locale synchronisée si elle existe
+      final localBox = await Hive.openBox('synchronized_submissions');
+      await localBox.delete(assignmentId);
+
+      print('📝 Soumission supprimée avec succès: $submissionId');
+    } catch (e) {
+      print('Erreur lors de la suppression de la soumission: $e');
+      rethrow;
     }
   }
 }

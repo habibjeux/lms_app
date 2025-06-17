@@ -9,8 +9,10 @@ import '../../models/enums/resource_type.dart';
 import '../../models/resource.dart';
 import '../../models/assignment.dart';
 import '../../providers/activity_provider.dart';
+import '../../providers/assignment_provider.dart';
 import '../../../quiz/presentation/screens/quiz_detail_screen.dart';
 import '../screens/activity_detail_screen.dart';
+import '../screens/assignment_detail_screen.dart';
 
 class ActivityListItem extends StatelessWidget {
   final Activity activity;
@@ -34,6 +36,9 @@ class ActivityListItem extends StatelessWidget {
           () => activityProvider.checkResourceDownloadStatus(activity.id));
     } else if (activity.type == ActivityType.QUIZ) {
       _checkQuizDownloadStatus(context, activityProvider);
+    } else if (activity.type == ActivityType.ASSIGNMENT) {
+      Future.microtask(
+          () => activityProvider.checkAssignmentDownloadStatus(activity.id));
     }
 
     return Consumer2<ActivityProvider, ConnectivityProvider>(
@@ -234,14 +239,25 @@ class ActivityListItem extends StatelessWidget {
 
   Future<void> _handleAssignmentDownload(BuildContext context,
       ActivityProvider provider, Assignment assignment) async {
+    provider.startAssignmentDownload(assignment.id);
+
     try {
-      await provider.downloadAssignment(assignment);
+      final assignmentProvider =
+          Provider.of<AssignmentProvider>(context, listen: false);
+
+      await assignmentProvider.loadAssignment(assignment.id);
+      await assignmentProvider.downloadAssignmentForOffline(assignment.id);
+
+      provider.completeAssignmentDownload(assignment.id, true);
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Devoir téléchargé avec succès')),
         );
       }
     } catch (e) {
+      provider.completeAssignmentDownload(assignment.id, false);
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Erreur lors du téléchargement: $e')),
@@ -276,8 +292,21 @@ class ActivityListItem extends StatelessWidget {
       return;
     }
 
+    if (!connectivityProvider.isOnline &&
+        activity.type == ActivityType.ASSIGNMENT &&
+        !provider.isDownloaded(activity.id)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ce devoir n\'est pas disponible hors ligne'),
+        ),
+      );
+      return;
+    }
+
     if (activity.type == ActivityType.QUIZ) {
       await _navigateToQuiz(context);
+    } else if (activity.type == ActivityType.ASSIGNMENT) {
+      await _navigateToAssignment(context);
     } else {
       Navigator.push(
         context,
@@ -306,6 +335,29 @@ class ActivityListItem extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Erreur lors du chargement du quiz: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _navigateToAssignment(BuildContext context) async {
+    try {
+      if (context.mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AssignmentDetailScreen(
+              assignmentId: activity.id,
+              moduleId: activity.moduleId,
+              chapterId: activity.chapterId,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur lors du chargement du devoir: $e')),
         );
       }
     }

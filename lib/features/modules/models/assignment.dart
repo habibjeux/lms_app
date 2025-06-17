@@ -38,47 +38,67 @@ class Assignment extends Activity {
   }) : super(type: ActivityType.ASSIGNMENT);
 
   factory Assignment.fromJson(Map<String, dynamic> json) {
-    return Assignment(
-      id: json['id'],
-      createdAt: DateTime.parse(json['createdAt']),
-      updatedAt: DateTime.parse(json['updatedAt']),
-      deletedAt:
-          json['deletedAt'] != null ? DateTime.parse(json['deletedAt']) : null,
-      active: json['active'] ?? true,
-      title: json['title'],
-      visible: json['visible'] ?? true,
-      order: json['order'] ?? 0,
-      scope: json['scope'] != null
-          ? ActivityScope.values.firstWhere(
-              (e) => e.toString() == 'ActivityScope.${json['scope']}',
-              orElse: () => ActivityScope.MODULE,
-            )
-          : ActivityScope.MODULE,
-      startDate:
-          json['startDate'] != null ? DateTime.parse(json['startDate']) : null,
-      endDate: json['endDate'] != null ? DateTime.parse(json['endDate']) : null,
-      moduleId: json['moduleId'],
-      chapterId: json['chapterId'],
-      instructions: json['instructions'] ?? '',
-      maxScore: json['maxScore'] is int
-          ? json['maxScore'].toDouble()
-          : (json['maxScore'] ?? 0.0),
-      allowLateSubmission: json['allowLateSubmission'] ?? false,
-      maxLateDays: json['maxLateDays'],
-      lateSubmissionPenalty: json['lateSubmissionPenalty'] != null
-          ? (json['lateSubmissionPenalty'] is int
-              ? json['lateSubmissionPenalty'].toDouble()
-              : json['lateSubmissionPenalty'])
-          : null,
-      acceptedFileTypes: json['acceptedFileTypes'] != null
-          ? List<String>.from(json['acceptedFileTypes'])
-          : const [],
-      maxFileSize: json['maxFileSize'] ?? 10485760, // 10MB par défaut
-      attachments: json['attachments'] != null
-          ? List<AssignmentAttachment>.from(
-              json['attachments'].map((x) => AssignmentAttachment.fromJson(x)))
-          : const [],
-    );
+    try {
+      return Assignment(
+        id: json['id']?.toString() ?? '',
+        createdAt: json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'])
+            : DateTime.now(),
+        updatedAt: json['updatedAt'] != null
+            ? DateTime.parse(json['updatedAt'])
+            : DateTime.now(),
+        deletedAt: json['deletedAt'] != null
+            ? DateTime.parse(json['deletedAt'])
+            : null,
+        active: json['active'] ?? true,
+        title: json['title']?.toString() ?? '',
+        visible: json['visible'] ?? true,
+        order: json['order'] is int ? json['order'] : 0,
+        scope: json['scope'] != null
+            ? ActivityScope.values.firstWhere(
+                (e) => e.toString() == 'ActivityScope.${json['scope']}',
+                orElse: () => ActivityScope.MODULE,
+              )
+            : ActivityScope.MODULE,
+        startDate: json['startDate'] != null
+            ? DateTime.parse(json['startDate'])
+            : null,
+        endDate:
+            json['endDate'] != null ? DateTime.parse(json['endDate']) : null,
+        moduleId: json['moduleId']?.toString() ?? '',
+        chapterId: json['chapterId']?.toString(),
+        instructions: json['instructions']?.toString() ?? '',
+        maxScore: json['maxScore'] is int
+            ? json['maxScore'].toDouble()
+            : (json['maxScore'] is double ? json['maxScore'] : 0.0),
+        allowLateSubmission: json['allowLateSubmission'] ?? false,
+        maxLateDays: json['maxLateDays'] is int ? json['maxLateDays'] : null,
+        lateSubmissionPenalty: json['lateSubmissionPenalty'] != null
+            ? (json['lateSubmissionPenalty'] is int
+                ? json['lateSubmissionPenalty'].toDouble()
+                : json['lateSubmissionPenalty'] is double
+                    ? json['lateSubmissionPenalty']
+                    : null)
+            : null,
+        acceptedFileTypes: json['acceptedFileTypes'] != null
+            ? List<String>.from(json['acceptedFileTypes'])
+            : const [],
+        maxFileSize: json['maxFileSize'] is int
+            ? json['maxFileSize'] * 1024 * 1024 // Convertir MB en bytes
+            : 10485760, // 10MB par défaut
+        attachments: json['attachments'] != null
+            ? List<AssignmentAttachment>.from(json['attachments'].map((x) =>
+                AssignmentAttachment.fromJson(Map<String, dynamic>.from(x))))
+            : const [],
+      );
+    } catch (e) {
+      print("Erreur lors de la conversion de l'assignment: $e");
+      print("JSON reçu: $json");
+      print("Type de JSON: ${json.runtimeType}");
+      print("Clés disponibles: ${json.keys.toList()}");
+      print("Stack trace: ${StackTrace.current}");
+      rethrow;
+    }
   }
 
   @override

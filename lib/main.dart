@@ -26,6 +26,7 @@ import 'package:timeago/timeago.dart' as timeago;
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'features/modules/providers/activity_provider.dart';
+import 'features/modules/providers/assignment_provider.dart';
 import 'features/quiz/providers/quiz_provider.dart';
 
 Future<void> main() async {
@@ -53,6 +54,7 @@ class MyApp extends StatelessWidget {
             create: (_) => AuthProvider(context, listen: false)),
         ChangeNotifierProvider(create: (_) => ModulesProvider()),
         ChangeNotifierProvider(create: (_) => ActivityProvider()),
+        ChangeNotifierProvider(create: (_) => AssignmentProvider()),
         ChangeNotifierProvider(create: (_) => MeetingsProvider()),
         ChangeNotifierProvider(create: (_) => ForumProvider()),
         ChangeNotifierProvider(create: (_) => QuizProvider()),

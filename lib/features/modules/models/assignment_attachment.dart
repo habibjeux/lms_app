@@ -21,23 +21,31 @@ class AssignmentAttachment extends BaseModel {
   });
 
   factory AssignmentAttachment.fromJson(Map<String, dynamic> json) {
-    return AssignmentAttachment(
-      id: json['id'] ?? '',
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'])
-          : DateTime.now(),
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'])
-          : DateTime.now(),
-      deletedAt:
-          json['deletedAt'] != null ? DateTime.parse(json['deletedAt']) : null,
-      active: json['active'] ?? true,
-      assignmentId: json['assignmentId'] ?? '',
-      filename: json['filename'] ?? '',
-      url: json['url'] ?? '',
-      fileSize: json['fileSize'] ?? 0,
-      mimeType: json['mimeType'] ?? 'application/octet-stream',
-    );
+    try {
+      return AssignmentAttachment(
+        id: json['id']?.toString() ?? '',
+        createdAt: json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'])
+            : DateTime.now(),
+        updatedAt: json['updatedAt'] != null
+            ? DateTime.parse(json['updatedAt'])
+            : DateTime.now(),
+        deletedAt: json['deletedAt'] != null
+            ? DateTime.parse(json['deletedAt'])
+            : null,
+        active: json['active'] ?? true,
+        assignmentId:
+            json['assignmentId']?.toString() ?? '', // Peut être absent de l'API
+        filename: json['filename']?.toString() ?? '',
+        url: json['url']?.toString() ?? '',
+        fileSize: json['fileSize'] is int ? json['fileSize'] : 0,
+        mimeType: json['mimeType']?.toString() ?? 'application/octet-stream',
+      );
+    } catch (e) {
+      print("Erreur lors de la conversion de l'attachment: $e");
+      print("JSON reçu: $json");
+      rethrow;
+    }
   }
 
   @override

@@ -36,6 +36,17 @@ class ActivityProvider with ChangeNotifier {
     }
   }
 
+  Future<void> checkAssignmentDownloadStatus(String activityId) async {
+    try {
+      final isDownloaded =
+          await _syncService.isAssignmentDownloaded(activityId);
+      _downloadStatus[activityId] = isDownloaded;
+      notifyListeners();
+    } catch (e) {
+      // Ignorer les erreurs
+    }
+  }
+
   void updateQuizDownloadStatus(String activityId, bool isDownloaded) {
     _downloadStatus[activityId] = isDownloaded;
     notifyListeners();
@@ -102,6 +113,19 @@ class ActivityProvider with ChangeNotifier {
     _isDownloading[quizId] = false;
     if (success) {
       _downloadStatus[quizId] = true;
+    }
+    notifyListeners();
+  }
+
+  void startAssignmentDownload(String assignmentId) {
+    _isDownloading[assignmentId] = true;
+    notifyListeners();
+  }
+
+  void completeAssignmentDownload(String assignmentId, bool success) {
+    _isDownloading[assignmentId] = false;
+    if (success) {
+      _downloadStatus[assignmentId] = true;
     }
     notifyListeners();
   }

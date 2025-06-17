@@ -82,6 +82,10 @@ class SyncService {
     return await _downloadStorage.isQuizDownloaded(quizId);
   }
 
+  Future<bool> isAssignmentDownloaded(String assignmentId) async {
+    return await _downloadStorage.isAssignmentDownloaded(assignmentId);
+  }
+
   Future<void> downloadChapter(
     String chapterId, {
     void Function(double)? onProgress,
