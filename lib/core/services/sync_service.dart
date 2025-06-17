@@ -1,6 +1,7 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:hive/hive.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../../features/modules/models/activity.dart';
 import '../../features/modules/models/assignment_attachment.dart';
 import '../../features/modules/models/resource.dart';
@@ -75,6 +76,10 @@ class SyncService {
 
   Future<bool> isResourceDownloaded(String resourceId) async {
     return await _downloadStorage.isResourceDownloaded(resourceId);
+  }
+
+  Future<bool> isQuizDownloaded(String quizId) async {
+    return await _downloadStorage.isQuizDownloaded(quizId);
   }
 
   Future<void> downloadChapter(
@@ -421,11 +426,103 @@ class SyncService {
   }) async {
     try {
       print('Téléchargement du module complet: $moduleId');
+
+      // 1. Télécharger les activités du module directement
+      print('🔍 Téléchargement des activités du module...');
+      try {
+        print('🔍 Appel API: /modules/$moduleId/activities');
+        final moduleActivitiesResponse =
+            await _api.get('/modules/$moduleId/activities');
+
+        print(
+            '🔍 Réponse API activités module: ${moduleActivitiesResponse.data}');
+
+        final moduleActivities = List<Map<String, dynamic>>.from(
+            moduleActivitiesResponse.data['data']);
+
+        print(
+            '🔍 Nombre d\'activités du module trouvées: ${moduleActivities.length}');
+
+        await _storage.saveModuleActivities(moduleId, moduleActivities);
+
+        for (var activityData in moduleActivities) {
+          final activity = Activity.fromJson(activityData);
+
+          // Debug: afficher le type de l'activité
+          print(
+              '🔍 Activité du module: ${activity.title} - Type: ${activity.type} - Classe: ${activity.runtimeType}');
+
+          if (activity is Resource) {
+            try {
+              print(
+                  'Téléchargement de la ressource du module: ${activity.title}');
+              await downloadResource(
+                activity,
+                isPartOfSync: true,
+              );
+            } catch (e) {
+              print(
+                  'Erreur lors du téléchargement de la ressource du module: $e');
+            }
+          } else if (activity.type == ActivityType.QUIZ) {
+            try {
+              print('Téléchargement du quiz du module: ${activity.title}');
+              await downloadQuiz(
+                activity.id,
+                moduleId: moduleId,
+                chapterId: null, // Activité du module, pas d'un chapitre
+                title: activity.title,
+              );
+            } catch (e) {
+              print('Erreur lors du téléchargement du quiz du module: $e');
+            }
+          } else if (activity is Assignment ||
+              activity.type == ActivityType.ASSIGNMENT) {
+            try {
+              print('🎯 DÉTECTION ASSIGNMENT du module: ${activity.title}');
+              print(
+                  '🎯 Type: ${activity.type}, Classe: ${activity.runtimeType}');
+
+              // Si ce n'est pas déjà un Assignment, le convertir
+              Assignment assignmentToDownload;
+              if (activity is Assignment) {
+                assignmentToDownload = activity;
+                print('🎯 Assignment déjà de la bonne classe');
+              } else {
+                // Créer un Assignment à partir des données de l'activité
+                print('🎯 Conversion vers Assignment...');
+                assignmentToDownload = Assignment.fromJson(activityData);
+                print('🎯 Assignment converti avec succès');
+              }
+
+              await downloadAssignment(
+                activity.id,
+                moduleId: moduleId,
+                chapterId: null,
+                title: activity.title,
+              );
+            } catch (e) {
+              print(
+                  '🎯 ❌ Erreur lors du téléchargement du devoir du module: $e');
+            }
+          } else {
+            print(
+                '🔍 Type d\'activité non géré: ${activity.type} - ${activity.runtimeType}');
+          }
+        }
+      } catch (e) {
+        print('Erreur lors du téléchargement des activités du module: $e');
+        // Continuer même si les activités du module échouent
+      }
+
+      // 2. Télécharger les chapitres et leurs activités
       final response = await _api.get('/modules/$moduleId/chapters');
       final chapters = List<Map<String, dynamic>>.from(response.data);
 
       if (chapters.isEmpty) {
-        onError?.call('Aucun chapitre trouvé dans ce module');
+        print(
+            'Aucun chapitre trouvé dans ce module, mais les activités du module ont été téléchargées');
+        onComplete?.call();
         return;
       }
 
@@ -455,6 +552,10 @@ class SyncService {
         for (var activityData in activities) {
           final activity = Activity.fromJson(activityData);
 
+          // Debug: afficher le type de l'activité
+          print(
+              '🔍 Activité du chapitre: ${activity.title} - Type: ${activity.type} - Classe: ${activity.runtimeType}');
+
           if (activity is Resource) {
             try {
               print('Téléchargement de la ressource: ${activity.title}');
@@ -480,6 +581,39 @@ class SyncService {
               print('Erreur lors du téléchargement du quiz: $e');
               onError?.call('Erreur lors du téléchargement du quiz: $e');
             }
+          } else if (activity is Assignment ||
+              activity.type == ActivityType.ASSIGNMENT) {
+            try {
+              print('🎯 DÉTECTION ASSIGNMENT du chapitre: ${activity.title}');
+              print(
+                  '🎯 Type: ${activity.type}, Classe: ${activity.runtimeType}');
+
+              // Si ce n'est pas déjà un Assignment, le convertir
+              Assignment assignmentToDownload;
+              if (activity is Assignment) {
+                assignmentToDownload = activity;
+                print('🎯 Assignment déjà de la bonne classe');
+              } else {
+                // Créer un Assignment à partir des données de l'activité
+                print('🎯 Conversion vers Assignment...');
+                assignmentToDownload = Assignment.fromJson(activityData);
+                print('🎯 Assignment converti avec succès');
+              }
+
+              await downloadAssignment(
+                activity.id,
+                moduleId: moduleId,
+                chapterId: chapterId,
+                title: activity.title,
+              );
+            } catch (e) {
+              print(
+                  '🎯 ❌ Erreur lors du téléchargement du devoir du chapitre: $e');
+              onError?.call('Erreur lors du téléchargement du devoir: $e');
+            }
+          } else {
+            print(
+                '🔍 Type d\'activité non géré: ${activity.type} - ${activity.runtimeType}');
           }
         }
 
@@ -513,7 +647,13 @@ class SyncService {
     try {
       print('Téléchargement du quiz: $title (ID: $quizId)');
       final response = await _api.get('/quizzes/$quizId');
-      final quizData = response.data['data'];
+
+      // Les données sont directement dans response.data, pas dans response.data['data']
+      final quizData = response.data;
+
+      if (quizData == null) {
+        throw Exception('Données du quiz vides');
+      }
 
       // Sauvegarder le quiz localement
       await _storage.saveQuiz(quizId, quizData);
@@ -533,108 +673,97 @@ class SyncService {
     }
   }
 
+  // Téléchargement des devoirs - version simplifiée
   Future<void> downloadAssignment(
-    Assignment assignment, {
-    void Function(double)? individualProgress,
+    String assignmentId, {
+    String? moduleId,
+    String? chapterId,
+    String? title,
+    void Function(double)? onProgress,
   }) async {
     try {
-      print('Téléchargement du devoir: ${assignment.title}');
+      print('📝 Téléchargement du devoir: $title (ID: $assignmentId)');
 
-      // Télécharger les pièces jointes
-      for (var attachment in assignment.attachments) {
-        await downloadAttachment(
-          attachment,
-          individualProgress: individualProgress,
+      // Récupérer les données complètes du devoir depuis l'API
+      final response = await _api.get('/assignments/$assignmentId');
+
+      if (response.statusCode == 200 && response.data != null) {
+        // Sauvegarder les données complètes du devoir
+        await _storage.saveAssignment(assignmentId, response.data);
+        print('📝 Devoir sauvegardé localement: $assignmentId');
+
+        // Télécharger les pièces jointes si elles existent
+        final assignmentData = response.data;
+        if (assignmentData['attachments'] != null) {
+          final attachments =
+              List<Map<String, dynamic>>.from(assignmentData['attachments']);
+          for (var attachmentData in attachments) {
+            await _downloadAssignmentAttachment(attachmentData);
+          }
+        }
+
+        // Marquer comme téléchargé
+        await _downloadStorage.markAssignmentAsDownloaded(
+          assignmentId,
+          {
+            'moduleId': moduleId,
+            'chapterId': chapterId,
+            'title': title,
+            'type': 'assignment',
+            'downloadedAt': DateTime.now().toIso8601String(),
+          },
         );
+
+        print('📝 ✅ Devoir téléchargé avec succès: $assignmentId');
+        onProgress?.call(1.0);
+      } else {
+        throw Exception('Impossible de récupérer les données du devoir');
       }
-
-      // Marquer le devoir comme téléchargé
-      await _downloadStorage.markAssignmentAsDownloaded(
-        assignment.id,
-        {
-          'moduleId': assignment.moduleId,
-          'chapterId': assignment.chapterId,
-          'title': assignment.title,
-          'type': 'assignment',
-          'downloadedAt': DateTime.now().toIso8601String(),
-        },
-      );
-
-      print('Devoir téléchargé avec succès: ${assignment.id}');
     } catch (e) {
-      print('Erreur lors du téléchargement du devoir: $e');
+      print('📝 ❌ Erreur lors du téléchargement du devoir: $e');
       rethrow;
     }
   }
-}
 
-extension AssignmentExtensions on SyncService {
-  Future<void> downloadAttachment(
-    AssignmentAttachment attachment, {
-    void Function(double)? individualProgress,
-  }) async {
-    if (!await isOnline()) {
-      throw Exception('Pas de connexion Internet');
-    }
-
+  // Téléchargement des pièces jointes de devoir
+  Future<void> _downloadAssignmentAttachment(
+      Map<String, dynamic> attachmentData) async {
     try {
-      final localPath = await _getAttachmentLocalPath();
-      final fileName = attachment.url.split('/').last;
-      final file = File('$localPath/$fileName');
+      final attachmentId = attachmentData['id'] as String;
+      final url = attachmentData['url'] as String;
+      final filename = attachmentData['filename'] as String;
 
-      if (await file.exists()) {
-        await _downloadStorage.markResourceAsDownloaded(attachment.id);
+      // Créer le répertoire local pour les pièces jointes
+      final directory = await getApplicationDocumentsDirectory();
+      final attachmentsPath = '${directory.path}/assignments/attachments';
+      await Directory(attachmentsPath).create(recursive: true);
+
+      final localFile = File('$attachmentsPath/$attachmentId-$filename');
+
+      // Vérifier si le fichier existe déjà
+      if (await localFile.exists()) {
+        print('Pièce jointe déjà téléchargée: $filename');
         return;
       }
 
+      // Télécharger le fichier
+      final serverUrl = dotenv.env['SERVER_URL'] ?? '';
+      final fullUrl = '$serverUrl$url';
+
       final response = await _apiUpload.get(
-        attachment.url,
-        options: Options(
-          responseType: ResponseType.bytes,
-          followRedirects: true,
-        ),
-        onReceiveProgress: (received, total) {
-          if (total != -1 && individualProgress != null) {
-            individualProgress(received / total);
-          }
-        },
+        fullUrl,
+        options: Options(responseType: ResponseType.bytes),
       );
 
-      await file.writeAsBytes(response.data);
-      await _downloadStorage.markResourceAsDownloaded(attachment.id);
+      await localFile.writeAsBytes(response.data);
+      print('Pièce jointe téléchargée: $filename');
     } catch (e) {
       print('Erreur lors du téléchargement de la pièce jointe: $e');
-      rethrow;
+      // Ne pas faire échouer tout le téléchargement pour une pièce jointe
     }
   }
 
-  Future<String?> getLocalAttachmentPath(
-      AssignmentAttachment attachment) async {
-    if (!await _downloadStorage.isResourceDownloaded(attachment.id)) {
-      return null;
-    }
-
-    try {
-      final localPath = await _getAttachmentLocalPath();
-      final fileName = attachment.url.split('/').last;
-      final file = File('$localPath/$fileName');
-
-      if (await file.exists()) {
-        return file.path;
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  Future<String> _getAttachmentLocalPath() async {
-    final directory = await getApplicationDocumentsDirectory();
-    final path = '${directory.path}/attachments';
-    await Directory(path).create(recursive: true);
-    return path;
-  }
-
+  // Synchronisation des soumissions en attente
   Future<void> syncPendingAssignmentSubmissions() async {
     if (!await isOnline()) {
       return;
@@ -655,7 +784,6 @@ extension AssignmentExtensions on SyncService {
         final submission = pendingSubmissionsBox.get(submissionId);
 
         if (submission == null) {
-          // Suppression de la référence si la soumission n'existe plus
           pendingSubmissions.remove(submissionId);
           continue;
         }
@@ -671,7 +799,7 @@ extension AssignmentExtensions on SyncService {
             if (await file.exists()) {
               formData.files.add(
                 MapEntry(
-                  'files[]',
+                  'files',
                   await MultipartFile.fromFile(file.path,
                       filename: file.path.split('/').last),
                 ),
@@ -684,19 +812,15 @@ extension AssignmentExtensions on SyncService {
           formData.fields
               .add(MapEntry('isLate', submission['isLate'].toString()));
 
-          final Response response;
-
-          response = await _api.post(
+          final response = await _apiUpload.post(
             '/assignments/submit',
             data: formData,
           );
 
           if (response.statusCode == 200 || response.statusCode == 201) {
-            // Mise à jour du statut de la soumission
-            submission['status'] = 'completed';
+            // Marquer comme synchronisé
+            submission['status'] = 'synchronized';
             await pendingSubmissionsBox.put(submissionId, submission);
-
-            // Suppression de la file d'attente
             pendingSubmissions.remove(submissionId);
 
             // Nettoyage des fichiers temporaires
@@ -706,23 +830,21 @@ extension AssignmentExtensions on SyncService {
                 await file.delete();
               }
             }
-          } else {
-            throw Exception('Erreur lors de la soumission du devoir');
+            print('Soumission synchronisée: $submissionId');
           }
         } catch (e) {
           print(
               'Erreur lors de la synchronisation de la soumission $submissionId: $e');
-          // En cas d'erreur, on garde la soumission dans la file pour une tentative ultérieure
         }
       }
 
-      // Mise à jour de la file d'attente
       await syncQueueBox.put('assignments_queue', pendingSubmissions);
     } catch (e) {
-      print('Erreur lors de la synchronisation des soumissions de devoirs: $e');
+      print('Erreur lors de la synchronisation des soumissions: $e');
     }
   }
 
+  // Obtenir le nombre de soumissions en attente
   Future<int> getPendingSubmissionsCount() async {
     try {
       final syncQueueBox = await Hive.openBox('sync_queue');
@@ -731,29 +853,6 @@ extension AssignmentExtensions on SyncService {
       return pendingSubmissions.length;
     } catch (e) {
       return 0;
-    }
-  }
-
-  Future<void> syncAssignmentData(String moduleId) async {
-    if (!await isOnline()) {
-      return;
-    }
-
-    try {
-      final response = await _api.get('/modules/$moduleId/assignments');
-
-      if (response.statusCode == 200) {
-        final assignments = List<Map<String, dynamic>>.from(response.data);
-
-        // Stockage des assignments dans Hive
-        final assignmentsBox = await Hive.openBox('assignments');
-        await assignmentsBox.put(moduleId, json.encode(assignments));
-
-        // Mise à jour de la date de dernière synchronisation
-        await _storage.saveLastSync('assignments_$moduleId', DateTime.now());
-      }
-    } catch (e) {
-      print('Erreur lors de la synchronisation des devoirs: $e');
     }
   }
 }

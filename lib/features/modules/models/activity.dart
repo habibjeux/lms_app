@@ -1,5 +1,5 @@
 import '../../../core/models/base_model.dart';
-import '../../quizzes/models/quiz.dart';
+import '../../quiz/models/quiz.dart';
 import 'assignment.dart';
 import 'enums/activity_scope.dart';
 import 'enums/activity_type.dart';
@@ -35,9 +35,9 @@ class Activity extends BaseModel {
 
   @override
   factory Activity.fromJson(Map<String, dynamic> json) {
-    ActivityType activityType = ActivityType.values.firstWhere(
-      (e) => e.toString() == 'ActivityType.${json['type']}',
-    );
+    // Utiliser la fonction utilitaire qui gère mieux les erreurs
+    ActivityType activityType =
+        activityTypeFromString(json['type'] ?? 'CONTENT');
 
     switch (activityType) {
       case ActivityType.RESOURCE:

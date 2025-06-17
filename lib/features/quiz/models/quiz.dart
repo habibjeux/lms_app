@@ -1,13 +1,12 @@
+import '../../modules/models/activity.dart';
 import '../../modules/models/enums/activity_type.dart';
 import '../../modules/models/enums/activity_scope.dart';
-import '../../modules/models/activity.dart';
 import 'question.dart';
 
 class Quiz extends Activity {
   final int duration; // en minutes
   final int maxAttempts;
   final double passingScore; // en pourcentage (0-1)
-  final double maxScore;
   final bool shuffleQuestions;
   final bool showCorrectAnswers;
   final List<Question> questions;
@@ -30,7 +29,6 @@ class Quiz extends Activity {
     required this.duration,
     required this.maxAttempts,
     required this.passingScore,
-    required this.maxScore,
     required this.shuffleQuestions,
     required this.showCorrectAnswers,
     required this.questions,
@@ -39,24 +37,56 @@ class Quiz extends Activity {
 
   factory Quiz.fromJson(Map<String, dynamic> json) {
     try {
-      List<Question> questions = [];
+      if (json == null) {
+        throw Exception('Les données JSON sont nulles');
+      }
 
+      List<Question> questions = [];
       if (json['questions'] != null) {
+        if (json['questions'] is! List) {
+          throw Exception('Le champ questions doit être une liste');
+        }
+
         questions = (json['questions'] as List)
             .map((question) {
               try {
+                if (question == null) {
+                  return null;
+                }
                 Map<String, dynamic> questionCopy =
                     Map<String, dynamic>.from(question);
                 questionCopy['quizId'] = json['id'];
+
+                // Conserver le type original avant conversion
+                String originalType = questionCopy['type'] ?? 'SCQ';
+
+                // Convertir le type de question selon les codes API
+                switch (originalType) {
+                  case 'SCQ':
+                  case 'MCQ':
+                    questionCopy['type'] = 'MULTIPLE_CHOICE';
+                    break;
+                  case 'TRUE_FALSE':
+                    questionCopy['type'] = 'TRUE_FALSE';
+                    break;
+                  case 'SHORT_ANSWER':
+                    questionCopy['type'] = 'SHORT_ANSWER';
+                    break;
+                  case 'MATCHING':
+                    questionCopy['type'] = 'MATCHING';
+                    break;
+                  default:
+                    questionCopy['type'] = 'MULTIPLE_CHOICE';
+                }
+
                 return Question.fromJson(questionCopy);
               } catch (e) {
                 print("Erreur lors du traitement d'une question: $e");
-                // Retourner une question par défaut ou null si nécessaire
                 return null;
               }
             })
             .whereType<Question>()
-            .toList(); // Filtre les valeurs null
+            .toList();
       }
 
       // Validation/conversion des valeurs avec des valeurs par défaut explicites
@@ -66,7 +96,6 @@ class Quiz extends Activity {
             ? DateTime.parse(json['createdAt'])
             : DateTime.now();
       } catch (e) {
-        print("Erreur de parsing de createdAt: $e");
         createdAt = DateTime.now();
       }
 
@@ -76,7 +105,6 @@ class Quiz extends Activity {
             ? DateTime.parse(json['updatedAt'])
             : DateTime.now();
       } catch (e) {
-        print("Erreur de parsing de updatedAt: $e");
         updatedAt = DateTime.now();
       }
 
@@ -86,7 +114,6 @@ class Quiz extends Activity {
             ? DateTime.parse(json['deletedAt'])
             : null;
       } catch (e) {
-        print("Erreur de parsing de deletedAt: $e");
         deletedAt = null;
       }
 
@@ -96,7 +123,6 @@ class Quiz extends Activity {
             ? DateTime.parse(json['startDate'])
             : null;
       } catch (e) {
-        print("Erreur de parsing de startDate: $e");
         startDate = null;
       }
 
@@ -105,49 +131,43 @@ class Quiz extends Activity {
         endDate =
             json['endDate'] != null ? DateTime.parse(json['endDate']) : null;
       } catch (e) {
-        print("Erreur de parsing de endDate: $e");
         endDate = null;
       }
 
       // Conversion sécurisée des valeurs numériques
       double passingScore = 0.6;
       if (json['passingScore'] != null) {
-        if (json['passingScore'] is int) {
+        if (json['passingScore'] is String) {
+          passingScore = double.parse(json['passingScore']);
+        } else if (json['passingScore'] is int) {
           passingScore = (json['passingScore'] as int) / 100.0;
         } else if (json['passingScore'] is double) {
           passingScore = json['passingScore'];
         }
       }
 
-      double maxScore = 100.0;
-      if (json['maxScore'] != null) {
-        if (json['maxScore'] is int) {
-          maxScore = (json['maxScore'] as int).toDouble();
-        } else if (json['maxScore'] is double) {
-          maxScore = json['maxScore'];
-        }
-      }
-
       return Quiz(
-        id: json['id'] ?? '',
+        id: json['id']?.toString() ?? '',
         createdAt: createdAt,
         updatedAt: updatedAt,
         deletedAt: deletedAt,
         active: json['active'] ?? true,
-        title: json['title'] ?? '',
+        title: json['title']?.toString() ?? '',
         visible: json['visible'] ?? true,
-        order: json['order'] ?? 0,
-        moduleId: json['moduleId'] ?? '',
-        chapterId: json['chapterId'],
+        order: json['order'] is int ? json['order'] : 0,
+        moduleId: json['moduleId']?.toString() ?? '',
+        chapterId: json['chapterId']?.toString(),
         scope: json['scope'] != null
-            ? activityScopeFromString(json['scope'])
+            ? ActivityScope.values.firstWhere(
+                (e) => e.toString() == 'ActivityScope.${json['scope']}',
+                orElse: () => ActivityScope.MODULE,
+              )
             : ActivityScope.MODULE,
         startDate: startDate,
         endDate: endDate,
-        duration: json['duration'] ?? 60,
-        maxAttempts: json['maxAttempts'] ?? 1,
+        duration: json['duration'] is int ? json['duration'] : 60,
+        maxAttempts: json['maxAttempts'] is int ? json['maxAttempts'] : 1,
         passingScore: passingScore,
-        maxScore: maxScore,
         shuffleQuestions: json['shuffleQuestions'] ?? false,
         showCorrectAnswers: json['showCorrectAnswers'] ?? true,
         questions: questions,
@@ -155,10 +175,10 @@ class Quiz extends Activity {
       );
     } catch (e) {
       print("Erreur lors de la conversion du quiz: $e");
-      // Si tout échoue, peut-être retourner un quiz "vide" ou relancer l'exception
-      rethrow; // ou retourner un Quiz par défaut
+      rethrow;
     }
   }
+
   @override
   Map<String, dynamic> toJson() {
     final baseJson = super.toJson();
@@ -167,7 +187,6 @@ class Quiz extends Activity {
       'duration': duration,
       'maxAttempts': maxAttempts,
       'passingScore': passingScore,
-      'maxScore': maxScore,
       'shuffleQuestions': shuffleQuestions,
       'showCorrectAnswers': showCorrectAnswers,
       'questions': questions.map((question) => question.toJson()).toList(),
@@ -193,7 +212,6 @@ class Quiz extends Activity {
     int? duration,
     int? maxAttempts,
     double? passingScore,
-    double? maxScore,
     bool? shuffleQuestions,
     bool? showCorrectAnswers,
     List<Question>? questions,
@@ -216,7 +234,6 @@ class Quiz extends Activity {
       duration: duration ?? this.duration,
       maxAttempts: maxAttempts ?? this.maxAttempts,
       passingScore: passingScore ?? this.passingScore,
-      maxScore: maxScore ?? this.maxScore,
       shuffleQuestions: shuffleQuestions ?? this.shuffleQuestions,
       showCorrectAnswers: showCorrectAnswers ?? this.showCorrectAnswers,
       questions: questions ?? List.from(this.questions),
@@ -224,6 +241,7 @@ class Quiz extends Activity {
     );
   }
 
+  // Getters utiles
   bool get isAvailable {
     final now = DateTime.now();
 
@@ -259,7 +277,7 @@ class Quiz extends Activity {
 
   int get questionCount => questions.length;
 
-  double get totalPoints {
-    return questions.fold(0, (sum, question) => sum + question.points);
+  double get maxScore {
+    return questions.fold(0.0, (sum, question) => sum + question.points);
   }
 }

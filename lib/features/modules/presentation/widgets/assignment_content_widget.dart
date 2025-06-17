@@ -623,8 +623,7 @@ class AssignmentContentWidget extends StatelessWidget {
                                       commentController.text,
                                       assignment.endDate != null &&
                                           DateTime.now()
-                                              .isAfter(assignment.endDate!),
-                                      existingSubmission: existingSubmission);
+                                              .isAfter(assignment.endDate!));
                                   Navigator.of(context).pop();
                                 },
                           child: const Text('Soumettre'),
@@ -738,12 +737,8 @@ class AssignmentContentWidget extends StatelessWidget {
         const SnackBar(content: Text('Téléchargement en cours...')),
       );
 
-      await _syncService.downloadAttachment(
-        attachment,
-        individualProgress: (progress) {
-          // Afficher la progression si nécessaire
-        },
-      );
+      // TODO: Implémenter le téléchargement des pièces jointes
+      // await _syncService.downloadAttachment(attachment);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -768,7 +763,9 @@ class AssignmentContentWidget extends StatelessWidget {
   Future<void> _openAttachment(
       BuildContext context, AssignmentAttachment attachment) async {
     try {
-      final localPath = await _syncService.getLocalAttachmentPath(attachment);
+      // TODO: Implémenter getLocalAttachmentPath
+      final localPath =
+          null; // await _syncService.getLocalAttachmentPath(attachment);
       print('Chemin local pour ${attachment.filename}: $localPath');
 
       if (localPath != null) {

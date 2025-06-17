@@ -26,9 +26,47 @@ class ActivityProvider with ChangeNotifier {
     }
   }
 
+  Future<void> checkQuizDownloadStatus(String activityId) async {
+    try {
+      final isDownloaded = await _syncService.isQuizDownloaded(activityId);
+      _downloadStatus[activityId] = isDownloaded;
+      notifyListeners();
+    } catch (e) {
+      // Ignorer les erreurs
+    }
+  }
+
   void updateQuizDownloadStatus(String activityId, bool isDownloaded) {
     _downloadStatus[activityId] = isDownloaded;
     notifyListeners();
+  }
+
+  void updateResourceDownloadStatus(String activityId, bool isDownloaded) {
+    _downloadStatus[activityId] = isDownloaded;
+    notifyListeners();
+  }
+
+  void updateAssignmentDownloadStatus(String activityId, bool isDownloaded) {
+    _downloadStatus[activityId] = isDownloaded;
+    notifyListeners();
+  }
+
+  // Forcer la vérification du statut de téléchargement d'un quiz
+  Future<void> refreshQuizDownloadStatus(String activityId) async {
+    try {
+      final isDownloaded = await _syncService.isQuizDownloaded(activityId);
+      _downloadStatus[activityId] = isDownloaded;
+      notifyListeners();
+    } catch (e) {
+      print('Erreur lors de la vérification du statut du quiz $activityId: $e');
+    }
+  }
+
+  // Rafraîchir le statut de tous les quiz
+  Future<void> refreshAllQuizStatuses(List<String> quizIds) async {
+    for (String quizId in quizIds) {
+      await refreshQuizDownloadStatus(quizId);
+    }
   }
 
   Future<void> downloadResource(Resource resource) async {
@@ -75,8 +113,11 @@ class ActivityProvider with ChangeNotifier {
 
     try {
       await _syncService.downloadAssignment(
-        assignment,
-        individualProgress: (progress) {
+        assignment.id,
+        moduleId: assignment.moduleId,
+        chapterId: assignment.chapterId,
+        title: assignment.title,
+        onProgress: (progress) {
           _downloadProgress[assignment.id] = progress;
           notifyListeners();
         },

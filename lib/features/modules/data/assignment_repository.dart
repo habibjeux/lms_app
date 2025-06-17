@@ -4,314 +4,281 @@ import 'package:http_parser/http_parser.dart';
 import 'package:uuid/uuid.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:hive/hive.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../core/exceptions/app_exception.dart';
+import '../../../core/services/offline_storage_service.dart';
 import '../models/assignment_submission.dart';
+import '../models/assignment.dart';
 
 class AssignmentRepository {
   final Dio _api = ApiClient.instance;
-  final Dio _apiUpload = ApiClient.apiUploadInstance;
+  final Dio _apiUpload = ApiClient.uploadInstance;
+  final OfflineStorageService _offlineStorage = OfflineStorageService();
 
-  Future<AssignmentSubmission?> getSubmission(String assignmentId) async {
+  // Récupérer un devoir par son ID
+  Future<Assignment?> getAssignment(String assignmentId) async {
     try {
-      // Vérifier d'abord localement
-      final pendingSubmissionsBox = await Hive.openBox('pending_submissions');
-      final pendingSubmissions = pendingSubmissionsBox.values.toList();
-
-      final pendingSubmission = pendingSubmissions.firstWhere(
-        (submission) =>
-            submission['assignmentId'] == assignmentId &&
-            submission['status'] == 'pending',
-        orElse: () => null,
-      );
-
-      if (pendingSubmission != null) {
-        return AssignmentSubmission(
-          id: pendingSubmission['id'],
-          assignmentId: pendingSubmission['assignmentId'],
-          studentId: '',
-          submissionDate: DateTime.parse(pendingSubmission['submissionDate']),
-          files: List<String>.from(pendingSubmission['files']),
-          comment: pendingSubmission['comment'],
-          isLate: pendingSubmission['isLate'],
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-          deletedAt: null,
-          active: true,
-        );
+      // Vérifier d'abord si le devoir est disponible localement
+      final localData = await _offlineStorage.getAssignment(assignmentId);
+      if (localData != null) {
+        print('📝 Devoir trouvé localement: $assignmentId');
+        return Assignment.fromJson(localData);
       }
 
-      // Sinon, chercher en ligne
-      final response =
-          await _api.get('/assignments/$assignmentId/my-submission');
-
-      if (response.statusCode == 200) {
-        if (response.data == null) {
-          return null;
+      // Si pas disponible localement et en ligne, récupérer depuis l'API
+      if (await _isOnline()) {
+        final response = await _api.get('/assignments/$assignmentId');
+        if (response.statusCode == 200 && response.data != null) {
+          // Sauvegarder localement pour usage hors ligne
+          await _offlineStorage.saveAssignment(assignmentId, response.data);
+          return Assignment.fromJson(response.data);
         }
-        return AssignmentSubmission.fromJson(response.data);
       }
 
       return null;
     } catch (e) {
-      throw AppException(
-          message: 'Erreur lors de la récupération de la soumission: $e');
+      print('Erreur lors de la récupération du devoir: $e');
+      return null;
     }
   }
 
-  Future<AssignmentSubmission> submitAssignment(
-    String assignmentId,
-    List<File> files,
-    String? comment,
-    bool isLate,
-  ) async {
+  // Récupérer la soumission de l'étudiant pour un devoir
+  Future<AssignmentSubmission?> getSubmission(String assignmentId) async {
     try {
-      final formData = FormData();
-      formData.fields.add(MapEntry('assignmentId', assignmentId));
-      if (comment != null) {
-        formData.fields.add(MapEntry('comment', comment));
+      // Vérifier d'abord s'il y a une soumission en attente localement
+      final pendingSubmission = await _getPendingSubmission(assignmentId);
+      if (pendingSubmission != null) {
+        print('📝 Soumission en attente trouvée localement: $assignmentId');
+        return pendingSubmission;
       }
-      formData.fields.add(MapEntry('isLate', isLate.toString()));
 
-      for (var file in files) {
-        final fileName = file.path.split('/').last;
-        final extension = fileName.split('.').last.toLowerCase();
-        final mimeType = _getMimeType(extension);
+      // Si en ligne, récupérer depuis l'API
+      if (await _isOnline()) {
+        final response =
+            await _api.get('/assignments/$assignmentId/my-submission');
+        if (response.statusCode == 200 && response.data != null) {
+          return AssignmentSubmission.fromJson(response.data);
+        }
+      } else {
+        // Hors ligne - vérifier s'il y a une soumission synchronisée localement
+        final localSubmission = await _getLocalSubmission(assignmentId);
+        if (localSubmission != null) {
+          return localSubmission;
+        }
+      }
 
-        formData.files.add(MapEntry(
+      return null;
+    } catch (e) {
+      print('Erreur lors de la récupération de la soumission: $e');
+      return null;
+    }
+  }
+
+  // Soumettre un devoir
+  Future<AssignmentSubmission> submitAssignment({
+    required String assignmentId,
+    required List<File> files,
+    String? comment,
+    bool isLate = false,
+  }) async {
+    try {
+      if (await _isOnline()) {
+        // Soumission en ligne directe
+        return await _submitOnline(
+          assignmentId: assignmentId,
+          files: files,
+          comment: comment,
+          isLate: isLate,
+        );
+      } else {
+        // Soumission hors ligne - sauvegarder localement
+        return await _submitOffline(
+          assignmentId: assignmentId,
+          files: files,
+          comment: comment,
+          isLate: isLate,
+        );
+      }
+    } catch (e) {
+      print('Erreur lors de la soumission: $e');
+      rethrow;
+    }
+  }
+
+  // Soumission en ligne
+  Future<AssignmentSubmission> _submitOnline({
+    required String assignmentId,
+    required List<File> files,
+    String? comment,
+    bool isLate = false,
+  }) async {
+    final formData = FormData();
+
+    // Ajouter les fichiers
+    for (final file in files) {
+      formData.files.add(
+        MapEntry(
           'files',
           await MultipartFile.fromFile(
             file.path,
-            filename: fileName,
-            contentType: MediaType.parse(mimeType),
+            filename: file.path.split('/').last,
           ),
-        ));
-      }
-
-      final response = await _apiUpload.post(
-        '/assignments/submit',
-        data: formData,
+        ),
       );
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return AssignmentSubmission.fromJson(response.data);
-      } else {
-        throw AppException(message: 'Erreur lors de la soumission');
-      }
-    } catch (e) {
-      throw AppException(message: 'Erreur lors de la soumission: $e');
-    }
-  }
-
-  Future<AssignmentSubmission> updateSubmission(
-    String submissionId,
-    String assignmentId,
-    List<File> files,
-    String? comment,
-    bool isLate,
-  ) async {
-    try {
-      final formData = FormData();
-      formData.fields.add(MapEntry('submissionId', submissionId));
-      if (comment != null) {
-        formData.fields.add(MapEntry('comment', comment));
-      }
-      formData.fields.add(MapEntry('isLate', isLate.toString()));
-
-      for (var file in files) {
-        final fileName = file.path.split('/').last;
-        final extension = fileName.split('.').last.toLowerCase();
-        final mimeType = _getMimeType(extension);
-
-        formData.files.add(MapEntry(
-          'files',
-          await MultipartFile.fromFile(
-            file.path,
-            filename: fileName,
-            contentType: MediaType.parse(mimeType),
-          ),
-        ));
-      }
-
-      final response = await _api.put(
-        '/assignments/$assignmentId/my-submission',
-        data: formData,
-      );
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return AssignmentSubmission.fromJson(response.data);
-      } else {
-        throw AppException(
-            message: 'Erreur lors de la mise à jour de la soumission');
-      }
-    } catch (e) {
-      throw AppException(message: 'Erreur lors de la mise à jour: $e');
-    }
-  }
-
-  Future<void> deleteSubmission(
-      String submissionId, String assignmentId) async {
-    try {
-      final response = await _api.delete(
-          '/assignments/$assignmentId/my-submission',
-          data: {'submissionId': submissionId});
-
-      if (response.statusCode != 200 && response.statusCode != 204) {
-        throw AppException(
-            message: 'Erreur lors de la suppression de la soumission');
-      }
-    } catch (e) {
-      throw AppException(message: e.toString());
-    }
-  }
-
-  Future<List<String>> _uploadFiles(List<File> files) async {
-    List<String> uploadedFilePaths = [];
-
-    for (var file in files) {
-      final fileName = file.path.split('/').last;
-      final extension = fileName.split('.').last.toLowerCase();
-
-      // Déterminer le type MIME
-      String mimeType = _getMimeType(extension);
-
-      final formData = FormData.fromMap({
-        'file': await MultipartFile.fromFile(file.path,
-            filename: fileName, contentType: MediaType.parse(mimeType)),
-      });
-
-      final response = await _apiUpload.post(
-        '/uploads',
-        data: formData,
-      );
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        uploadedFilePaths.add(response.data['filePath']);
-      } else {
-        throw AppException(
-            message: 'Erreur lors de l\'upload du fichier $fileName');
-      }
     }
 
-    return uploadedFilePaths;
-  }
+    // Ajouter les autres données
+    formData.fields.add(MapEntry('assignmentId', assignmentId));
+    formData.fields.add(MapEntry('comment', comment ?? ''));
+    formData.fields.add(MapEntry('isLate', isLate.toString()));
 
-  String _getMimeType(String extension) {
-    switch (extension) {
-      case 'pdf':
-        return 'application/pdf';
-      case 'doc':
-        return 'application/msword';
-      case 'docx':
-        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-      case 'xls':
-        return 'application/vnd.ms-excel';
-      case 'xlsx':
-        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-      case 'ppt':
-        return 'application/vnd.ms-powerpoint';
-      case 'pptx':
-        return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-      case 'jpg':
-      case 'jpeg':
-        return 'image/jpeg';
-      case 'png':
-        return 'image/png';
-      case 'gif':
-        return 'image/gif';
-      case 'txt':
-        return 'text/plain';
-      default:
-        return 'application/octet-stream';
-    }
-  }
+    final response = await _apiUpload.post(
+      '/assignments/submit',
+      data: formData,
+    );
 
-  Future<void> saveOfflineSubmission(
-    String assignmentId,
-    List<File> files,
-    String? comment,
-    bool isLate,
-    String? existingSubmissionId,
-  ) async {
-    // Stockage des fichiers localement pour synchronisation future
-    final submissionId = existingSubmissionId ?? const Uuid().v4();
-    final now = DateTime.now();
-
-    // Copier les fichiers dans un dossier temporaire
-    final tempDir = await getTemporaryDirectory();
-    final submissionDir =
-        Directory('${tempDir.path}/pending_submissions/$submissionId');
-    await submissionDir.create(recursive: true);
-
-    List<String> localPaths = [];
-
-    for (var file in files) {
-      final fileName = file.path.split('/').last;
-      final localFile = File('${submissionDir.path}/$fileName');
-      await file.copy(localFile.path);
-      localPaths.add(localFile.path);
-    }
-
-    // Enregistrer les métadonnées dans Hive
-    final submissionData = {
-      'id': submissionId,
-      'assignmentId': assignmentId,
-      'files': localPaths,
-      'comment': comment,
-      'submissionDate': now.toIso8601String(),
-      'isLate': isLate,
-      'existingSubmissionId': existingSubmissionId,
-      'status': 'pending',
-      'createdAt': now.toIso8601String(),
-      'updatedAt': now.toIso8601String(),
-      'active': true,
-    };
-
-    final pendingSubmissionsBox = await Hive.openBox('pending_submissions');
-    await pendingSubmissionsBox.put(submissionId, submissionData);
-
-    // Ajouter à la file d'attente de synchronisation
-    final syncQueueBox = await Hive.openBox('sync_queue');
-    final syncQueue = syncQueueBox.get('assignments_queue', defaultValue: []);
-    if (!syncQueue.contains(submissionId)) {
-      syncQueue.add(submissionId);
-      await syncQueueBox.put('assignments_queue', syncQueue);
-    }
-  }
-
-  Future<void> markOfflineSubmissionForDeletion(String submissionId) async {
-    final pendingSubmissionsBox = await Hive.openBox('pending_submissions');
-    final submission = pendingSubmissionsBox.get(submissionId);
-
-    if (submission != null) {
-      // Si c'est une soumission locale qui n'a pas encore été synchronisée, on peut simplement la supprimer
-      await pendingSubmissionsBox.delete(submissionId);
-
-      // Retirer de la file d'attente de synchronisation
-      final syncQueueBox = await Hive.openBox('sync_queue');
-      final syncQueue = syncQueueBox.get('assignments_queue', defaultValue: []);
-      if (syncQueue.contains(submissionId)) {
-        syncQueue.remove(submissionId);
-        await syncQueueBox.put('assignments_queue', syncQueue);
-      }
-
-      // Supprimer les fichiers locaux
-      final tempDir = await getTemporaryDirectory();
-      final submissionDir =
-          Directory('${tempDir.path}/pending_submissions/$submissionId');
-      if (await submissionDir.exists()) {
-        await submissionDir.delete(recursive: true);
-      }
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return AssignmentSubmission.fromJson(response.data);
     } else {
-      // Si c'est une soumission qui a déjà été synchronisée, on la marque pour suppression
-      final deletionQueueBox = await Hive.openBox('deletion_queue');
-      final deletionQueue =
-          deletionQueueBox.get('assignments_queue', defaultValue: []);
-      if (!deletionQueue.contains(submissionId)) {
-        deletionQueue.add(submissionId);
-        await deletionQueueBox.put('assignments_queue', deletionQueue);
+      throw Exception(
+          'Erreur lors de la soumission: ${response.statusMessage}');
+    }
+  }
+
+  // Soumission hors ligne
+  Future<AssignmentSubmission> _submitOffline({
+    required String assignmentId,
+    required List<File> files,
+    String? comment,
+    bool isLate = false,
+  }) async {
+    final submissionId = const Uuid().v4();
+    final submissionDate = DateTime.now();
+
+    // Copier les fichiers dans un répertoire temporaire
+    final tempDir = await _getTempSubmissionDirectory(submissionId);
+    final savedFiles = <String>[];
+
+    for (final file in files) {
+      final fileName = file.path.split('/').last;
+      final tempFile = File('${tempDir.path}/$fileName');
+      await file.copy(tempFile.path);
+      savedFiles.add(tempFile.path);
+    }
+
+    // Créer la soumission locale
+    final submission = AssignmentSubmission(
+      id: submissionId,
+      createdAt: submissionDate,
+      updatedAt: submissionDate,
+      active: true,
+      assignmentId: assignmentId,
+      studentId: 'current_student', // À remplacer par l'ID réel de l'étudiant
+      files: savedFiles,
+      comment: comment,
+      isLate: isLate,
+      submissionDate: submissionDate,
+    );
+
+    // Sauvegarder dans la file d'attente de synchronisation
+    await _savePendingSubmission(submission);
+
+    print('📝 Soumission sauvegardée localement en attente de synchronisation');
+    return submission;
+  }
+
+  // Obtenir le répertoire temporaire pour les soumissions
+  Future<Directory> _getTempSubmissionDirectory(String submissionId) async {
+    final appDir = await getApplicationDocumentsDirectory();
+    final tempDir = Directory('${appDir.path}/temp_submissions/$submissionId');
+    await tempDir.create(recursive: true);
+    return tempDir;
+  }
+
+  // Sauvegarder une soumission en attente
+  Future<void> _savePendingSubmission(AssignmentSubmission submission) async {
+    final pendingBox = await Hive.openBox('pending_submissions');
+    final syncQueueBox = await Hive.openBox('sync_queue');
+
+    // Sauvegarder la soumission avec un statut personnalisé
+    final submissionData = submission.toJson();
+    submissionData['status'] =
+        'pending'; // Statut en attente de synchronisation
+    await pendingBox.put(submission.id, submissionData);
+
+    // Ajouter à la file de synchronisation
+    final List<dynamic> queue =
+        syncQueueBox.get('assignments_queue', defaultValue: []);
+    queue.add(submission.id);
+    await syncQueueBox.put('assignments_queue', queue);
+  }
+
+  // Récupérer une soumission en attente
+  Future<AssignmentSubmission?> _getPendingSubmission(
+      String assignmentId) async {
+    try {
+      final pendingBox = await Hive.openBox('pending_submissions');
+      final submissions = pendingBox.values;
+
+      for (final submissionData in submissions) {
+        if (submissionData['assignmentId'] == assignmentId) {
+          return AssignmentSubmission.fromJson(submissionData);
+        }
       }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Récupérer une soumission synchronisée localement
+  Future<AssignmentSubmission?> _getLocalSubmission(String assignmentId) async {
+    try {
+      final localBox = await Hive.openBox('synchronized_submissions');
+      final submissionData = localBox.get(assignmentId);
+      if (submissionData != null) {
+        return AssignmentSubmission.fromJson(submissionData);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Vérifier la connexion Internet
+  Future<bool> _isOnline() async {
+    final List<ConnectivityResult> connectivityResult =
+        await (Connectivity().checkConnectivity());
+
+    if (connectivityResult.contains(ConnectivityResult.none)) {
+      return false;
+    }
+
+    try {
+      final result = await InternetAddress.lookup('google.com');
+      return result.isNotEmpty && result[0].rawAddress.isNotEmpty;
+    } on SocketException catch (_) {
+      return false;
+    }
+  }
+
+  // Obtenir le chemin local d'une pièce jointe
+  Future<String?> getLocalAttachmentPath(
+      String attachmentId, String filename) async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final attachmentPath =
+          '${directory.path}/assignments/attachments/$attachmentId-$filename';
+      final file = File(attachmentPath);
+
+      if (await file.exists()) {
+        return file.path;
+      }
+      return null;
+    } catch (e) {
+      return null;
     }
   }
 }

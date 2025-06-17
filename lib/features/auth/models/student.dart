@@ -1,5 +1,5 @@
 import '../../modules/models/enrollment.dart';
-import '../../quizzes/models/quiz_attempt.dart';
+import '../../quiz/models/quiz_attempt.dart';
 import 'user.dart';
 
 class Student {

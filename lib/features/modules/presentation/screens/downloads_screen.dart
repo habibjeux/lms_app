@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../../../core/services/download_storage_service.dart';
 import '../../../../core/services/storage_service.dart';
 import '../../../../core/widgets/loading_indicator.dart';
+import '../../providers/activity_provider.dart';
+import 'package:provider/provider.dart';
 
 class DownloadsScreen extends StatefulWidget {
   const DownloadsScreen({super.key});
@@ -32,6 +34,11 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       final Map<String, Map<String, dynamic>> organizedItems = {};
 
       for (var itemData in items) {
+        // Filtrer les chapitres - on ne veut afficher que les activités réelles
+        if (itemData['type'] == 'chapter') {
+          continue;
+        }
+
         final moduleId = itemData['moduleId']?.toString();
         final chapterId = itemData['chapterId']?.toString();
 
@@ -111,6 +118,24 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     try {
       setState(() => _isDeleting = true);
       await _downloadStorage.deleteItem(id, type);
+
+      // Notifier l'ActivityProvider pour mettre à jour le statut
+      if (mounted) {
+        final activityProvider =
+            Provider.of<ActivityProvider>(context, listen: false);
+        switch (type) {
+          case 'quiz':
+            activityProvider.updateQuizDownloadStatus(id, false);
+            break;
+          case 'resource':
+            activityProvider.updateResourceDownloadStatus(id, false);
+            break;
+          case 'assignment':
+            activityProvider.updateAssignmentDownloadStatus(id, false);
+            break;
+        }
+      }
+
       await _loadDownloadedItems();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -138,7 +163,68 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   Future<void> _clearAllDownloads() async {
     try {
       setState(() => _isDeleting = true);
+
+      // Récupérer tous les éléments téléchargés avant de les supprimer
+      final quizIds = <String>[];
+      final resourceIds = <String>[];
+      final assignmentIds = <String>[];
+
+      for (var moduleData in _downloadedItems.values) {
+        final chapters = Map<String, Map<String, dynamic>>.from(
+            moduleData['chapters'] ?? {});
+        for (var chapterData in chapters.values) {
+          final activities =
+              List<Map<String, dynamic>>.from(chapterData['activities'] ?? []);
+          for (var activity in activities) {
+            switch (activity['type']) {
+              case 'quiz':
+                quizIds.add(activity['id']);
+                break;
+              case 'resource':
+                resourceIds.add(activity['id']);
+                break;
+              case 'assignment':
+                assignmentIds.add(activity['id']);
+                break;
+            }
+          }
+        }
+        // Activités du module
+        final moduleActivities =
+            List<Map<String, dynamic>>.from(moduleData['activities'] ?? []);
+        for (var activity in moduleActivities) {
+          switch (activity['type']) {
+            case 'quiz':
+              quizIds.add(activity['id']);
+              break;
+            case 'resource':
+              resourceIds.add(activity['id']);
+              break;
+            case 'assignment':
+              assignmentIds.add(activity['id']);
+              break;
+          }
+        }
+      }
+
       await _downloadStorage.clearAllDownloads();
+
+      // Mettre à jour le statut de toutes les activités dans l'ActivityProvider
+      if (mounted) {
+        final activityProvider =
+            Provider.of<ActivityProvider>(context, listen: false);
+
+        for (String quizId in quizIds) {
+          activityProvider.updateQuizDownloadStatus(quizId, false);
+        }
+        for (String resourceId in resourceIds) {
+          activityProvider.updateResourceDownloadStatus(resourceId, false);
+        }
+        for (String assignmentId in assignmentIds) {
+          activityProvider.updateAssignmentDownloadStatus(assignmentId, false);
+        }
+      }
+
       await _loadDownloadedItems();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

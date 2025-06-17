@@ -255,6 +255,10 @@ class DownloadStorageService {
           final box = await _getChaptersBox();
           await box.delete(id);
           break;
+        case 'assignment':
+          final box = await _getAssignmentsBox();
+          await box.delete(id);
+          break;
       }
       print('Élément supprimé avec succès: $id');
     } catch (e) {
@@ -269,10 +273,12 @@ class DownloadStorageService {
       final resourcesBox = await _getResourcesBox();
       final chaptersBox = await _getChaptersBox();
       final quizzesBox = await _getQuizzesBox();
+      final assignmentsBox = await _getAssignmentsBox();
 
       await resourcesBox.clear();
       await chaptersBox.clear();
       await quizzesBox.clear();
+      await assignmentsBox.clear();
 
       print('Tous les téléchargements ont été supprimés');
     } catch (e) {

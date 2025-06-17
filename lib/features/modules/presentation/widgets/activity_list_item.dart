@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/helper/DateHelper.dart';
 import '../../../../core/providers/connectivity_provider.dart';
-import '../../../quizzes/data/providers/quiz_provider.dart';
+import '../../../quiz/providers/quiz_provider.dart';
 import '../../models/activity.dart';
 import '../../models/enums/activity_type.dart';
 import '../../models/enums/resource_type.dart';
 import '../../models/resource.dart';
 import '../../models/assignment.dart';
 import '../../providers/activity_provider.dart';
-import '../../../quizzes/presentation/screens/quiz_detail_screen.dart';
+import '../../../quiz/presentation/screens/quiz_detail_screen.dart';
 import '../screens/activity_detail_screen.dart';
 
 class ActivityListItem extends StatelessWidget {
@@ -73,11 +73,10 @@ class ActivityListItem extends StatelessWidget {
       BuildContext context, ActivityProvider provider) async {
     if (activity.type == ActivityType.QUIZ) {
       try {
-        final quizProvider = Provider.of<QuizProvider>(context, listen: false);
-        final isDownloaded = await quizProvider.isQuizDownloaded(activity.id);
-        provider.updateQuizDownloadStatus(activity.id, isDownloaded);
+        // Utiliser directement l'ActivityProvider pour vérifier le statut
+        await provider.refreshQuizDownloadStatus(activity.id);
       } catch (e) {
-        // Ignorer l'erreur si la méthode n'existe pas
+        print('Erreur lors de la vérification du statut du quiz: $e');
       }
     }
   }
@@ -292,47 +291,21 @@ class ActivityListItem extends StatelessWidget {
   }
 
   Future<void> _navigateToQuiz(BuildContext context) async {
-    final quizProvider = Provider.of<QuizProvider>(context, listen: false);
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Dialog(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        child: Center(
-          child: CircularProgressIndicator(),
-        ),
-      ),
-    );
-
     try {
-      await quizProvider.loadQuiz(activity.id);
-
-      await quizProvider.loadQuizAttempts(activity.id);
-
-      if (context.mounted) Navigator.pop(context);
-
-      if (quizProvider.currentQuiz != null && context.mounted) {
+      if (context.mounted) {
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => QuizDetailScreen(
-              quiz: quizProvider.currentQuiz!,
+              quizId: activity.id,
             ),
           ),
         );
-      } else if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Impossible de charger le quiz')),
-        );
       }
     } catch (e) {
-      if (context.mounted) Navigator.pop(context);
-
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: $e')),
+          SnackBar(content: Text('Erreur lors du chargement du quiz: $e')),
         );
       }
     }

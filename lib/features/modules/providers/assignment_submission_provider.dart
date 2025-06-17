@@ -36,59 +36,19 @@ class AssignmentSubmissionProvider with ChangeNotifier {
     }
   }
 
-  Future<void> submitAssignment(
-      String assignmentId, List<File> files, String? comment, bool isLate,
-      {AssignmentSubmission? existingSubmission}) async {
+  Future<void> submitAssignment(String assignmentId, List<File> files,
+      String? comment, bool isLate) async {
     _setSaving(true);
     _clearError();
     setSuccess(false);
 
     try {
-      final isOnline = await _syncService.isOnline();
-
-      if (isOnline) {
-        if (existingSubmission != null) {
-          _submission = await _repository.updateSubmission(
-              existingSubmission.id, assignmentId, files, comment, isLate);
-        } else {
-          _submission = await _repository.submitAssignment(
-              assignmentId, files, comment, isLate);
-        }
-      } else {
-        await _repository.saveOfflineSubmission(
-            assignmentId, files, comment, isLate, existingSubmission?.id);
-
-        // Optionnellement mettre à jour l'affichage en local
-        if (existingSubmission != null) {
-          _submission = AssignmentSubmission(
-            id: existingSubmission.id,
-            assignmentId: assignmentId,
-            files: files.map((f) => f.path).toList(),
-            comment: comment,
-            isLate: isLate,
-            submissionDate: DateTime.now(),
-            studentId: existingSubmission.studentId,
-            createdAt: existingSubmission.createdAt,
-            updatedAt: DateTime.now(),
-            deletedAt: null,
-            active: true,
-          );
-        } else {
-          _submission = AssignmentSubmission(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            assignmentId: assignmentId,
-            files: files.map((f) => f.path).toList(),
-            comment: comment,
-            isLate: isLate,
-            submissionDate: DateTime.now(),
-            studentId: '', // sera rempli lors de la synchronisation
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-            deletedAt: null,
-            active: true,
-          );
-        }
-      }
+      _submission = await _repository.submitAssignment(
+        assignmentId: assignmentId,
+        files: files,
+        comment: comment,
+        isLate: isLate,
+      );
 
       setSuccess(true);
     } catch (e) {
@@ -105,14 +65,7 @@ class AssignmentSubmissionProvider with ChangeNotifier {
     setSuccess(false);
 
     try {
-      final isOnline = await _syncService.isOnline();
-
-      if (isOnline) {
-        await _repository.deleteSubmission(submissionId, assignmentId);
-      } else {
-        await _repository.markOfflineSubmissionForDeletion(submissionId);
-      }
-
+      // Pour l'instant, on supprime juste localement
       _submission = null;
       setSuccess(true);
     } catch (e) {

@@ -7,6 +7,7 @@ class OfflineStorageService {
   static const String activitiesBoxName = 'activities';
   static const String lastSyncBoxName = 'lastSync';
   static const String _quizzesBox = 'quizzes';
+  static const String _assignmentsBox = 'assignments';
 
   Future<Box> _openBox(String boxName) async {
     if (!Hive.isBoxOpen(boxName)) {
@@ -174,7 +175,26 @@ class OfflineStorageService {
 
   Future<Map<String, dynamic>?> getQuiz(String quizId) async {
     final box = await Hive.openBox(_quizzesBox);
-    return box.get(quizId);
+    final data = box.get(quizId);
+    if (data != null && data is Map) {
+      return Map<String, dynamic>.from(data);
+    }
+    return null;
+  }
+
+  Future<void> saveAssignment(
+      String assignmentId, Map<String, dynamic> assignmentData) async {
+    final box = await Hive.openBox(_assignmentsBox);
+    await box.put(assignmentId, assignmentData);
+  }
+
+  Future<Map<String, dynamic>?> getAssignment(String assignmentId) async {
+    final box = await Hive.openBox(_assignmentsBox);
+    final data = box.get(assignmentId);
+    if (data != null && data is Map) {
+      return Map<String, dynamic>.from(data);
+    }
+    return null;
   }
 
   Future<void> saveChapterContent(String chapterId, String content) async {

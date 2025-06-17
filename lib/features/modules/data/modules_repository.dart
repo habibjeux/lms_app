@@ -9,44 +9,41 @@ class ModulesRepository {
   final StorageService _storage = StorageService();
   final String _modulesStorageKey = 'student_modules';
 
-  Future<List<Module>> getModules({bool forceRefresh = false}) async {
+  Future<Map<String, dynamic>> getModules({
+    int page = 1,
+    int limit = 5,
+    String? search,
+  }) async {
     try {
-      // Si pas de forceRefresh, essayer d'abord le cache
-      if (!forceRefresh) {
-        final cachedModules = await _getCachedModules();
-        if (cachedModules.isNotEmpty) {
-          return cachedModules;
-        }
+      final queryParams = {
+        'page': page.toString(),
+        'limit': limit.toString(),
+        if (search != null && search.isNotEmpty) 'search': search,
+      };
+
+      final response = await _dio.get(
+        '/modules',
+        queryParameters: queryParams,
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> modulesData = response.data['data'];
+        final int total = response.data['totals'];
+
+        final List<Module> modules =
+            modulesData.map((item) => Module.fromJson(item)).toList();
+
+        return {
+          'modules': modules,
+          'total': total,
+        };
+      } else {
+        throw AppException(message: 'Erreur lors du chargement des modules');
       }
-
-      final response = await _dio.get('/students/modules');
-      print('Response: ${response.data}');
-      final responseData = response.data['data'] as List;
-
-      // Maintenant, vous devez extraire le module de chaque élément
-      final List<Module> modules = responseData
-          .map(
-              (item) => Module.fromJson(item['module'] as Map<String, dynamic>))
-          .toList();
-
-      print('Modules: $modules');
-      // Mettre en cache
-      await _cacheModules(modules);
-
-      return modules;
     } on DioException catch (e) {
-      // En cas d'erreur réseau, essayer le cache
-      if (e.type == DioExceptionType.connectionError) {
-        final cachedModules = await _getCachedModules();
-        if (cachedModules.isNotEmpty) {
-          return cachedModules;
-        }
-      }
-
       if (e.error is AppException) {
         throw e.error as AppException;
       }
-      print('Erreur lors du chargement des modules: ${e.message}');
       throw AppException(message: 'Erreur lors du chargement des modules');
     }
   }

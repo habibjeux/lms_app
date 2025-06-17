@@ -26,7 +26,7 @@ import 'package:timeago/timeago.dart' as timeago;
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'features/modules/providers/activity_provider.dart';
-import 'features/quizzes/data/providers/quiz_provider.dart';
+import 'features/quiz/providers/quiz_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

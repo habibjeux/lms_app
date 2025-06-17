@@ -1,10 +1,11 @@
 import '../../../core/models/base_model.dart';
 
 class Answer extends BaseModel {
+  final String questionId;
   final String text;
   final bool isCorrect;
-  final double points;
-  final String questionId;
+  final int order;
+  final String? explanation;
 
   Answer({
     required super.id,
@@ -12,15 +13,16 @@ class Answer extends BaseModel {
     required super.updatedAt,
     super.deletedAt,
     required super.active,
+    required this.questionId,
     required this.text,
     required this.isCorrect,
-    required this.points,
-    required this.questionId,
+    required this.order,
+    this.explanation,
   });
 
   factory Answer.fromJson(Map<String, dynamic> json) {
     return Answer(
-      id: json['id'],
+      id: json['id'] ?? '',
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'])
           : DateTime.now(),
@@ -30,29 +32,24 @@ class Answer extends BaseModel {
       deletedAt:
           json['deletedAt'] != null ? DateTime.parse(json['deletedAt']) : null,
       active: json['active'] ?? true,
-      text: json['text'],
-      isCorrect: json['isCorrect'] ?? false,
-      points: json['points'] is String
-          ? double.tryParse(json['points']) ?? 0.0
-          : (json['points'] is int
-              ? json['points'].toDouble()
-              : (json['points'] ?? 0.0)),
-      questionId: json['questionId'] ?? '',
+      questionId: json['questionId'] ?? json['quizId'] ?? '',
+      text: json['text'] ?? '',
+      isCorrect: json['isCorrect'] ?? json['correct'] ?? false,
+      order: json['order'] ?? 0,
+      explanation: json['explanation'],
     );
   }
 
   @override
   Map<String, dynamic> toJson() {
+    final baseJson = super.toJson();
     return {
-      'id': id,
-      'createdAt': createdAt.toIso8601String(),
-      'updatedAt': updatedAt.toIso8601String(),
-      'deletedAt': deletedAt?.toIso8601String(),
-      'active': active,
+      ...baseJson,
+      'questionId': questionId,
       'text': text,
       'isCorrect': isCorrect,
-      'points': points,
-      'questionId': questionId,
+      'order': order,
+      'explanation': explanation,
     };
   }
 
@@ -62,10 +59,11 @@ class Answer extends BaseModel {
     DateTime? updatedAt,
     DateTime? deletedAt,
     bool? active,
+    String? questionId,
     String? text,
     bool? isCorrect,
-    double? points,
-    String? questionId,
+    int? order,
+    String? explanation,
   }) {
     return Answer(
       id: id ?? this.id,
@@ -73,10 +71,11 @@ class Answer extends BaseModel {
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       active: active ?? this.active,
+      questionId: questionId ?? this.questionId,
       text: text ?? this.text,
       isCorrect: isCorrect ?? this.isCorrect,
-      points: points ?? this.points,
-      questionId: questionId ?? this.questionId,
+      order: order ?? this.order,
+      explanation: explanation ?? this.explanation,
     );
   }
 }

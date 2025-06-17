@@ -13,6 +13,10 @@ class ModulesProvider with ChangeNotifier {
   List<Module> _modules = [];
   bool _isLoading = false;
   String? _error;
+  int _currentPage = 1;
+  int _totalPages = 1;
+  String? _searchQuery;
+  static const int _itemsPerPage = 5;
 
   Module? _currentModule;
   List<Chapter> _visibleChapters = [];
@@ -25,6 +29,8 @@ class ModulesProvider with ChangeNotifier {
   List<Module> get modules => _modules;
   bool get isLoading => _isLoading;
   String? get error => _error;
+  bool get hasMorePages => _currentPage < _totalPages;
+  String? get searchQuery => _searchQuery;
 
   Module? get currentModule => _currentModule;
   List<Chapter> get visibleChapters => _visibleChapters;
@@ -34,39 +40,58 @@ class ModulesProvider with ChangeNotifier {
   List<Activity> get moduleActivities => _moduleActivities;
   Future<List<Chapter>>? get chaptersFuture => _chaptersFuture;
 
-  Future<void> loadModules() async {
+  Future<void> loadModules({bool refresh = false}) async {
+    if (refresh) {
+      _currentPage = 1;
+      _modules = [];
+    }
+
+    if (_isLoading) return;
+
     _setLoading(true);
     _clearError();
 
     try {
-      _modules = await _repository.getModules();
-      _clearError();
-    } on AppException catch (e) {
-      _setError(e.toString());
+      final result = await _repository.getModules(
+        page: _currentPage,
+        limit: _itemsPerPage,
+        search: _searchQuery,
+      );
+
+      final modulesList = result['modules'] as List<Module>;
+      final total = result['total'] as int;
+
+      if (refresh) {
+        _modules = modulesList;
+      } else {
+        _modules.addAll(modulesList);
+      }
+
+      _totalPages = (total / _itemsPerPage).ceil();
+      _currentPage++;
+      notifyListeners();
     } catch (e) {
-      print('Erreur lors du chargement des modules: $e');
-      _setError('Une erreur est survenue lors du chargement des modules');
+      _setError('Erreur lors du chargement des modules');
+      debugPrint('Erreur dans loadModules: $e');
     } finally {
       _setLoading(false);
     }
   }
 
+  Future<void> searchModules(String query) async {
+    _searchQuery = query;
+    await loadModules(refresh: true);
+  }
+
   Future<void> refreshModules() async {
-    try {
-      final freshModules = await _repository.getModules(forceRefresh: true);
-      _modules = freshModules;
-      _clearError();
-      notifyListeners();
-    } on AppException catch (e) {
-      _setError(e.toString());
-    }
+    await loadModules(refresh: true);
   }
 
   List<Module> getActiveModules() {
     return _modules.where((module) => module.active).toList();
   }
 
-  List<Module> searchModules(String query) {
+  List<Module> filterModules(String query) {
     if (query.isEmpty) return _modules;
 
     return _modules.where((module) {
