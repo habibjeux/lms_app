@@ -6,13 +6,11 @@ import '../../../../core/providers/dashboard_provider.dart';
 import '../../../messaging/presentation/screens/discussions_screen.dart';
 import '../../../settings/presentation/screens/settings_screen.dart';
 import '../widgets/student_drawer.dart';
-import 'home_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
   static final List<Widget> _pages = [
-    const HomeScreen(),
     const ModulesScreen(),
     const DiscussionsScreen(),
     const SessionsListScreen(),
@@ -33,11 +31,6 @@ class DashboardScreen extends StatelessWidget {
             },
             destinations: const [
               NavigationDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home),
-                label: 'Accueil',
-              ),
-              NavigationDestination(
                 icon: Icon(Icons.school_outlined),
                 selectedIcon: Icon(Icons.school),
                 label: 'Modules',
@@ -53,9 +46,9 @@ class DashboardScreen extends StatelessWidget {
                 label: 'Réunions',
               ),
               NavigationDestination(
-                icon: Icon(Icons.person_outline),
-                selectedIcon: Icon(Icons.person),
-                label: 'Settings',
+                icon: Icon(Icons.settings_outlined),
+                selectedIcon: Icon(Icons.settings),
+                label: 'Paramètres',
               ),
             ],
           ),

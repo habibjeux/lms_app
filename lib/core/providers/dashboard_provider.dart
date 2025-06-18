@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class DashboardProvider with ChangeNotifier {
-  int _currentIndex = 0;
+  int _currentIndex = 0; // Commence sur les modules maintenant
 
   int get currentIndex => _currentIndex;
 
