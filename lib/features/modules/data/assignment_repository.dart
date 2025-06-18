@@ -1,13 +1,11 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
-import 'package:http_parser/http_parser.dart';
 import 'package:uuid/uuid.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:hive/hive.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../../../core/network/api_client.dart';
-import '../../../core/exceptions/app_exception.dart';
 import '../../../core/services/offline_storage_service.dart';
 import '../../../core/services/download_storage_service.dart';
 import '../models/assignment_submission.dart';
@@ -15,7 +13,7 @@ import '../models/assignment.dart';
 
 class AssignmentRepository {
   final Dio _api = ApiClient.instance;
-  final Dio _apiUpload = ApiClient.uploadInstance;
+  final Dio _apiUpload = ApiClient.apiUploadInstance;
   final OfflineStorageService _offlineStorage = OfflineStorageService();
 
   // Récupérer un devoir par son ID
@@ -118,36 +116,80 @@ class AssignmentRepository {
     String? comment,
     bool isLate = false,
   }) async {
-    final formData = FormData();
+    try {
+      print('🚀 Début de la soumission en ligne');
+      print('📝 Assignment ID: $assignmentId');
+      print('📁 Nombre de fichiers: ${files.length}');
+      print('💬 Commentaire: $comment');
+      print('⏰ En retard: $isLate');
 
-    // Ajouter les fichiers
-    for (final file in files) {
-      formData.files.add(
-        MapEntry(
-          'files',
-          await MultipartFile.fromFile(
-            file.path,
-            filename: file.path.split('/').last,
+      final formData = FormData();
+
+      // Ajouter les fichiers
+      for (final file in files) {
+        final filename = file.path.split('/').last;
+        print('📎 Ajout du fichier: $filename (${file.lengthSync()} bytes)');
+
+        formData.files.add(
+          MapEntry(
+            'files',
+            await MultipartFile.fromFile(
+              file.path,
+              filename: filename,
+            ),
           ),
-        ),
+        );
+      }
+
+      // Ajouter les autres données
+      formData.fields.add(MapEntry('assignmentId', assignmentId));
+      formData.fields.add(MapEntry('comment', comment ?? ''));
+      formData.fields.add(MapEntry('isLate', isLate.toString()));
+
+      print('🌐 Envoi de la requête POST vers /assignments/submit');
+
+      final response = await _apiUpload.post(
+        '/assignments/submit',
+        data: formData,
       );
-    }
 
-    // Ajouter les autres données
-    formData.fields.add(MapEntry('assignmentId', assignmentId));
-    formData.fields.add(MapEntry('comment', comment ?? ''));
-    formData.fields.add(MapEntry('isLate', isLate.toString()));
+      print('📥 Réponse reçue - Status: ${response.statusCode}');
+      print('📥 Données de réponse: ${response.data}');
 
-    final response = await _apiUpload.post(
-      '/assignments/submit',
-      data: formData,
-    );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return AssignmentSubmission.fromJson(response.data);
+      } else {
+        throw Exception(
+            'Erreur lors de la soumission: ${response.statusMessage}');
+      }
+    } catch (e) {
+      print('❌ Erreur lors de la soumission en ligne: $e');
+      print('❌ Type d\'erreur: ${e.runtimeType}');
+      if (e is DioException) {
+        print('❌ DioException details:');
+        print('   - Type: ${e.type}');
+        print('   - Message: ${e.message}');
+        print('   - Response: ${e.response?.data}');
+        print('   - Status code: ${e.response?.statusCode}');
 
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      return AssignmentSubmission.fromJson(response.data);
-    } else {
-      throw Exception(
-          'Erreur lors de la soumission: ${response.statusMessage}');
+        // Extraire le message d'erreur spécifique du serveur
+        if (e.response?.data != null) {
+          final responseData = e.response!.data;
+          String errorMessage = 'Une erreur est survenue';
+
+          if (responseData is Map<String, dynamic>) {
+            errorMessage = responseData['error'] ??
+                responseData['message'] ??
+                responseData['detail'] ??
+                'Une erreur est survenue';
+          } else if (responseData is String) {
+            errorMessage = responseData;
+          }
+
+          throw Exception(errorMessage);
+        }
+      }
+      rethrow;
     }
   }
 
@@ -339,7 +381,22 @@ class AssignmentRepository {
 
       print('📝 Soumission supprimée avec succès: $submissionId');
     } catch (e) {
-      print('Erreur lors de la suppression de la soumission: $e');
+      if (e is DioException && e.response?.data != null) {
+        final responseData = e.response!.data;
+        String errorMessage = 'Erreur lors de la suppression';
+
+        if (responseData is Map<String, dynamic>) {
+          errorMessage = responseData['error'] ??
+              responseData['message'] ??
+              responseData['detail'] ??
+              'Erreur lors de la suppression';
+        } else if (responseData is String) {
+          errorMessage = responseData;
+        }
+        // On lance une nouvelle exception propre qui sera attrapée par le provider
+        throw Exception(errorMessage);
+      }
+      // Pour toutes les autres erreurs, on relance l'originale
       rethrow;
     }
   }

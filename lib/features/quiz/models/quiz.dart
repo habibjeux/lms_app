@@ -37,10 +37,6 @@ class Quiz extends Activity {
 
   factory Quiz.fromJson(Map<String, dynamic> json) {
     try {
-      if (json == null) {
-        throw Exception('Les données JSON sont nulles');
-      }
-
       List<Question> questions = [];
       if (json['questions'] != null) {
         if (json['questions'] is! List) {

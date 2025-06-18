@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import '../../../core/exceptions/app_exception.dart';
 import '../../../core/services/sync_service.dart';
 import '../data/quiz_repository.dart';
 import '../models/quiz.dart';
 import '../models/quiz_attempt.dart';
 import '../models/student_answer.dart';
 import '../models/question.dart';
-import '../models/answer.dart';
 
 class QuizProvider with ChangeNotifier {
   final QuizRepository _repository = QuizRepository();

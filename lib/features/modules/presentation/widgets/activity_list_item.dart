@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/helper/DateHelper.dart';
+import '../../../../core/utlils/error_helper.dart';
 import '../../../../core/providers/connectivity_provider.dart';
 import '../../../quiz/providers/quiz_provider.dart';
 import '../../models/activity.dart';
@@ -203,7 +204,9 @@ class ActivityListItem extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors du téléchargement: $e')),
+          SnackBar(
+              content: Text(ErrorHelper.getCleanErrorMessage(
+                  e, 'Erreur lors du téléchargement'))),
         );
       }
     }
@@ -231,7 +234,9 @@ class ActivityListItem extends StatelessWidget {
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors du téléchargement: $e')),
+          SnackBar(
+              content: Text(ErrorHelper.getCleanErrorMessage(
+                  e, 'Erreur lors du téléchargement'))),
         );
       }
     }
@@ -260,7 +265,9 @@ class ActivityListItem extends StatelessWidget {
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors du téléchargement: $e')),
+          SnackBar(
+              content: Text(ErrorHelper.getCleanErrorMessage(
+                  e, 'Erreur lors du téléchargement'))),
         );
       }
     }
@@ -334,7 +341,9 @@ class ActivityListItem extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors du chargement du quiz: $e')),
+          SnackBar(
+              content: Text(ErrorHelper.getCleanErrorMessage(
+                  e, 'Erreur lors du chargement du quiz'))),
         );
       }
     }
@@ -357,7 +366,9 @@ class ActivityListItem extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors du chargement du devoir: $e')),
+          SnackBar(
+              content: Text(ErrorHelper.getCleanErrorMessage(
+                  e, 'Erreur lors du chargement du devoir'))),
         );
       }
     }

@@ -61,14 +61,7 @@ class QuizRepository {
       if (cachedData != null) {
         // S'assurer que cachedData est du bon type
         Map<String, dynamic> quizData;
-        if (cachedData is Map<String, dynamic>) {
-          quizData = cachedData;
-        } else if (cachedData is Map) {
-          quizData = Map<String, dynamic>.from(cachedData);
-        } else {
-          print('Type de données de cache invalide: ${cachedData.runtimeType}');
-          return null;
-        }
+        quizData = cachedData;
         return Quiz.fromJson(quizData);
       }
     } catch (e) {
@@ -120,8 +113,29 @@ class QuizRepository {
     } catch (e) {
       // En cas d'erreur, sauvegarder localement pour synchronisation ultérieure
       await _saveAnswerLocally(answer);
-      throw AppException(
-          message: 'Erreur lors de la sauvegarde de la réponse: $e');
+      // Extraire le message d'erreur spécifique du serveur si disponible
+      String errorMessage = 'Erreur lors de la sauvegarde de la réponse';
+
+      if (e is DioException && e.response?.data != null) {
+        final responseData = e.response!.data;
+        if (responseData is Map<String, dynamic>) {
+          errorMessage = responseData['error'] ??
+              responseData['message'] ??
+              responseData['detail'] ??
+              'Erreur lors de la sauvegarde de la réponse';
+        } else if (responseData is String) {
+          errorMessage = responseData;
+        }
+      } else if (e is Exception) {
+        final exceptionMessage = e.toString();
+        if (exceptionMessage.startsWith('Exception: ')) {
+          errorMessage = exceptionMessage.substring(11);
+        } else {
+          errorMessage = exceptionMessage;
+        }
+      }
+
+      throw AppException(message: errorMessage);
     }
   }
 
@@ -164,7 +178,30 @@ class QuizRepository {
       if (e is AppException) {
         rethrow;
       }
-      throw AppException(message: 'Erreur lors de la soumission du quiz: $e');
+
+      // Extraire le message d'erreur spécifique du serveur si disponible
+      String errorMessage = 'Erreur lors de la soumission du quiz';
+
+      if (e is DioException && e.response?.data != null) {
+        final responseData = e.response!.data;
+        if (responseData is Map<String, dynamic>) {
+          errorMessage = responseData['error'] ??
+              responseData['message'] ??
+              responseData['detail'] ??
+              'Erreur lors de la soumission du quiz';
+        } else if (responseData is String) {
+          errorMessage = responseData;
+        }
+      } else if (e is Exception) {
+        final exceptionMessage = e.toString();
+        if (exceptionMessage.startsWith('Exception: ')) {
+          errorMessage = exceptionMessage.substring(11);
+        } else {
+          errorMessage = exceptionMessage;
+        }
+      }
+
+      throw AppException(message: errorMessage);
     }
   }
 

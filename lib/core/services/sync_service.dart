@@ -3,7 +3,6 @@ import 'package:dio/dio.dart';
 import 'package:hive/hive.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../../features/modules/models/activity.dart';
-import '../../features/modules/models/assignment_attachment.dart';
 import '../../features/modules/models/resource.dart';
 import '../../features/modules/models/enums/activity_type.dart';
 import '../network/api_client.dart';
@@ -11,7 +10,6 @@ import 'download_storage_service.dart';
 import 'offline_storage_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
-import 'dart:convert';
 
 import '../../features/modules/models/assignment.dart';
 

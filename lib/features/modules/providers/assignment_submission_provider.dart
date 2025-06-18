@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'dart:io';
 import '../../../core/services/sync_service.dart';
+import '../../../core/utlils/error_helper.dart';
 import '../data/assignment_repository.dart';
 import '../models/assignment_submission.dart';
 
@@ -30,7 +31,8 @@ class AssignmentSubmissionProvider with ChangeNotifier {
       _submission = await _repository.getSubmission(assignmentId);
       _clearError();
     } catch (e) {
-      _setError('Erreur lors du chargement de la soumission: $e');
+      _setError(ErrorHelper.getCleanErrorMessage(
+          e, 'Erreur lors du chargement de la soumission'));
     } finally {
       _setLoading(false);
     }
@@ -52,7 +54,8 @@ class AssignmentSubmissionProvider with ChangeNotifier {
 
       setSuccess(true);
     } catch (e) {
-      _setError('Erreur lors de la soumission: $e');
+      _setError(
+          ErrorHelper.getCleanErrorMessage(e, 'Erreur lors de la soumission'));
     } finally {
       _setSaving(false);
     }
@@ -65,11 +68,13 @@ class AssignmentSubmissionProvider with ChangeNotifier {
     setSuccess(false);
 
     try {
-      // Pour l'instant, on supprime juste localement
+      // Appeler le repository pour supprimer sur le serveur
+      await _repository.deleteSubmission(submissionId, assignmentId);
       _submission = null;
       setSuccess(true);
     } catch (e) {
-      _setError('Erreur lors de la suppression: $e');
+      _setError(
+          ErrorHelper.getCleanErrorMessage(e, 'Erreur lors de la suppression'));
     } finally {
       _setSaving(false);
     }

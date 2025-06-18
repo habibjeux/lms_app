@@ -19,12 +19,12 @@ class AssignmentDetailScreen extends StatefulWidget {
   final String? title;
 
   const AssignmentDetailScreen({
-    Key? key,
+    super.key,
     required this.assignmentId,
     this.moduleId,
     this.chapterId,
     this.title,
-  }) : super(key: key);
+  });
 
   @override
   State<AssignmentDetailScreen> createState() => _AssignmentDetailScreenState();

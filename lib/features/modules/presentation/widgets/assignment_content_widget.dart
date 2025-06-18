@@ -7,6 +7,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'dart:io';
 import 'package:path/path.dart' as path;
 
+import '../../../../core/utlils/error_helper.dart';
+
 import '../../../../core/helper/ResourceViewerHelper.dart';
 import '../../../../core/providers/connectivity_provider.dart';
 import '../../../../core/services/sync_service.dart';
@@ -721,7 +723,8 @@ class AssignmentContentWidget extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erreur lors de la sélection des fichiers: $e'),
+            content: Text(ErrorHelper.getCleanErrorMessage(
+                e, 'Erreur lors de la sélection des fichiers')),
             backgroundColor: Colors.red,
           ),
         );
@@ -752,7 +755,8 @@ class AssignmentContentWidget extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erreur lors du téléchargement: $e'),
+            content: Text(ErrorHelper.getCleanErrorMessage(
+                e, 'Erreur lors du téléchargement')),
             backgroundColor: Colors.red,
           ),
         );
@@ -797,7 +801,8 @@ class AssignmentContentWidget extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erreur lors de l\'ouverture du document: $e'),
+            content: Text(ErrorHelper.getCleanErrorMessage(
+                e, 'Erreur lors de l\'ouverture du document')),
             backgroundColor: Colors.red,
           ),
         );
@@ -820,7 +825,8 @@ class AssignmentContentWidget extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erreur lors de l\'ouverture du document: $e'),
+            content: Text(ErrorHelper.getCleanErrorMessage(
+                e, 'Erreur lors de l\'ouverture du document')),
             backgroundColor: Colors.red,
           ),
         );
@@ -858,7 +864,8 @@ class AssignmentContentWidget extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erreur lors de l\'ouverture du fichier: $e'),
+            content: Text(ErrorHelper.getCleanErrorMessage(
+                e, 'Erreur lors de l\'ouverture du fichier')),
             backgroundColor: Colors.red,
           ),
         );
@@ -947,7 +954,8 @@ class AssignmentContentWidget extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erreur lors du téléchargement: $e'),
+            content: Text(ErrorHelper.getCleanErrorMessage(
+                e, 'Erreur lors du téléchargement')),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 4),
           ),

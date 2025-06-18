@@ -5,6 +5,7 @@ import '../models/assignment.dart';
 import '../models/assignment_submission.dart';
 import '../../../core/services/sync_service.dart';
 import '../../../core/services/download_storage_service.dart';
+import '../../../core/utlils/error_helper.dart';
 import 'package:flutter/material.dart';
 
 class AssignmentProvider with ChangeNotifier {
@@ -14,7 +15,7 @@ class AssignmentProvider with ChangeNotifier {
 
   Assignment? _currentAssignment;
   AssignmentSubmission? _currentSubmission;
-  List<AssignmentSubmission> _submissions = [];
+  final List<AssignmentSubmission> _submissions = [];
 
   bool _isLoading = false;
   bool _isDownloading = false;
@@ -22,7 +23,7 @@ class AssignmentProvider with ChangeNotifier {
   double _downloadProgress = 0.0;
   double _submitProgress = 0.0;
   String? _error;
-  bool _isDownloaded = false;
+  final bool _isDownloaded = false;
 
   // Getters
   Assignment? get currentAssignment => _currentAssignment;
@@ -192,7 +193,8 @@ class AssignmentProvider with ChangeNotifier {
       _submitProgress = 1.0;
       notifyListeners();
     } catch (e) {
-      _setError('Erreur lors de la soumission: $e');
+      _setError(
+          ErrorHelper.getCleanErrorMessage(e, 'Erreur lors de la soumission'));
     } finally {
       _setSubmitting(false);
     }
@@ -221,7 +223,8 @@ class AssignmentProvider with ChangeNotifier {
       _currentSubmission = null;
       notifyListeners();
     } catch (e) {
-      _setError('Erreur lors de la suppression: $e');
+      _setError(
+          ErrorHelper.getCleanErrorMessage(e, 'Erreur lors de la suppression'));
     } finally {
       _setLoading(false);
     }

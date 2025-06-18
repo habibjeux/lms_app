@@ -353,7 +353,7 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
               ),
             ),
           );
-        }).toList(),
+        }),
       ],
     );
   }
@@ -424,7 +424,7 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
               ),
             ),
           );
-        }).toList(),
+        }),
       ],
     );
   }
@@ -637,7 +637,7 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
             index,
             isSelected,
           );
-        }).toList(),
+        }),
       ],
     );
   }
