@@ -73,8 +73,12 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
         final isOnline = connectivityProvider.isOnline;
 
         return Scaffold(
+          backgroundColor: Colors.grey[50],
           appBar: AppBar(
-            title: Text(widget.title ?? 'Devoir'),
+            backgroundColor: Colors.teal,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            toolbarHeight: 40,
             actions: [
               if (assignment != null && isOnline && !_isDownloaded)
                 IconButton(
@@ -82,19 +86,26 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
                       ? null
                       : _downloadAssignment,
                   icon: assignmentProvider.isDownloading
-                      ? CircularProgressIndicator(
-                          value: assignmentProvider.downloadProgress,
-                          strokeWidth: 2)
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
                       : const Icon(Icons.download),
                   tooltip: 'Télécharger le devoir',
                 ),
               if (_isDownloaded)
-                const Icon(Icons.offline_pin, color: Colors.green),
+                const Icon(Icons.offline_pin, color: Colors.white),
             ],
           ),
           body: Column(
             children: [
               if (!isOnline) const OfflineBanner(),
+              const SizedBox(height: 8),
+              if (assignment != null) _buildAssignmentHeader(assignment),
               Expanded(
                 child: _buildBody(assignmentProvider, connectivityProvider),
               ),
@@ -130,14 +141,12 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
     return RefreshIndicator(
       onRefresh: () => provider.refresh(widget.assignmentId),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildAssignmentHeader(assignment),
-            const SizedBox(height: 24),
             _buildAssignmentDetails(assignment),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             _buildSubmissionSection(provider, connectivityProvider),
           ],
         ),
@@ -152,116 +161,165 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
     final isNotStarted =
         assignment.startDate != null && now.isBefore(assignment.startDate!);
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.assignment,
-                  size: 28,
-                  color:
-                      isOverdue ? Colors.red : Theme.of(context).primaryColor,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    assignment.title,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: isOverdue ? Colors.red : null,
-                        ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            if (assignment.startDate != null) ...[
-              Row(
-                children: [
-                  const Icon(Icons.schedule, size: 16, color: Colors.grey),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Disponible depuis: ${_formatDate(assignment.startDate!)}',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-            ],
-            if (assignment.endDate != null) ...[
-              Row(
-                children: [
-                  Icon(
-                    Icons.access_time,
-                    size: 16,
-                    color: isOverdue ? Colors.red : Colors.orange,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'À rendre avant: ${_formatDate(assignment.endDate!)}',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: isOverdue ? Colors.red : Colors.orange,
-                          fontWeight: isOverdue ? FontWeight.bold : null,
-                        ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-            ],
-            Row(
-              children: [
-                const Icon(Icons.star, size: 16, color: Colors.amber),
-                const SizedBox(width: 8),
-                Text(
-                  'Note maximale: ${assignment.maxScore.toInt()} points',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ],
-            ),
-            if (isNotStarted) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Text(
-                  'Pas encore disponible',
-                  style: TextStyle(
-                      color: Colors.blue, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-            if (isOverdue) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Text(
-                  'Date limite dépassée',
-                  style:
-                      TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.teal,
+            Colors.teal.withOpacity(0.8),
           ],
         ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.teal.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: const Icon(
+                  Icons.assignment,
+                  color: Colors.white,
+                  size: 30,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      assignment.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${assignment.maxScore.toInt()} points',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (assignment.startDate != null || assignment.endDate != null) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  if (assignment.startDate != null)
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.schedule,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Disponible depuis: ${_formatDate(assignment.startDate!)}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  if (assignment.endDate != null) ...[
+                    if (assignment.startDate != null) const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          color: isOverdue ? Colors.orange[100] : Colors.white,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'À rendre avant: ${_formatDate(assignment.endDate!)}',
+                          style: TextStyle(
+                            color:
+                                isOverdue ? Colors.orange[100] : Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+          if (isNotStarted || isOverdue) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: isOverdue
+                    ? Colors.red.withOpacity(0.2)
+                    : Colors.blue.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                isOverdue ? 'Date limite dépassée' : 'Pas encore disponible',
+                style: TextStyle(
+                  color: isOverdue ? Colors.orange[100] : Colors.lightBlue[100],
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
 
   Widget _buildAssignmentDetails(Assignment assignment) {
     return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -377,6 +435,9 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
         !isNotStarted && (assignment.allowLateSubmission || !isOverdue);
 
     return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -408,29 +469,47 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.green.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.green.withOpacity(0.8),
+                Colors.green.withOpacity(0.6),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.green.withOpacity(0.2),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Row(
             children: [
-              const Icon(Icons.check_circle, color: Colors.green),
+              const Icon(Icons.check_circle, color: Colors.white),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       'Soumission effectuée',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            color: Colors.green,
-                            fontWeight: FontWeight.bold,
-                          ),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                     Text(
                       'Le ${_formatDate(submission.submissionDate)}',
-                      style: Theme.of(context).textTheme.bodySmall,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
                     ),
                   ],
                 ),
@@ -501,31 +580,62 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
         Container(
           width: double.infinity,
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.withOpacity(0.3)),
-            borderRadius: BorderRadius.circular(8),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.teal.withOpacity(0.05),
+                Colors.teal.withOpacity(0.1),
+              ],
+            ),
+            border: Border.all(
+              color: Colors.teal.withOpacity(0.3),
+              width: 2,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.teal.withOpacity(0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: InkWell(
             onTap: _pickFiles,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(16),
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(24),
               child: Column(
                 children: [
-                  Icon(
-                    Icons.cloud_upload,
-                    size: 48,
-                    color: Colors.grey[600],
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.teal.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(50),
+                    ),
+                    child: Icon(
+                      Icons.cloud_upload,
+                      size: 32,
+                      color: Colors.teal,
+                    ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 16),
                   Text(
                     'Cliquez pour sélectionner vos fichiers',
-                    style: Theme.of(context).textTheme.titleSmall,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.teal,
+                    ),
                   ),
+                  const SizedBox(height: 4),
                   Text(
                     'ou glissez-déposez ici',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey[600],
-                        ),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.teal.withOpacity(0.7),
+                    ),
                   ),
                 ],
               ),
@@ -605,28 +715,68 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
   }
 
   Widget _buildCannotSubmit(bool isNotStarted, bool isOverdue) {
+    final Color primaryColor = isNotStarted ? Colors.blue : Colors.orange;
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.grey.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            isNotStarted ? Icons.schedule : Icons.block,
-            color: Colors.grey,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            primaryColor.withOpacity(0.1),
+            primaryColor.withOpacity(0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: primaryColor.withOpacity(0.2),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: primaryColor.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              isNotStarted
-                  ? 'Ce devoir n\'est pas encore disponible'
-                  : 'La date limite de soumission est dépassée',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey[700],
-                  ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: primaryColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(50),
             ),
+            child: Icon(
+              isNotStarted ? Icons.schedule : Icons.block,
+              size: 32,
+              color: primaryColor,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            isNotStarted
+                ? 'Ce devoir n\'est pas encore disponible'
+                : 'La date limite de soumission est dépassée',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: primaryColor,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            isNotStarted
+                ? 'Vous pourrez soumettre votre travail une fois le devoir ouvert.'
+                : 'Vous ne pouvez plus soumettre de travail pour ce devoir.',
+            style: TextStyle(
+              fontSize: 14,
+              color: primaryColor.withOpacity(0.7),
+            ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),

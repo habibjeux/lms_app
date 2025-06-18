@@ -49,27 +49,107 @@ class ActivityListItem extends StatelessWidget {
           return const SizedBox.shrink();
         }
 
-        return ListTile(
-          leading: _buildActivityIcon(),
-          title: Text(activity.title),
-          subtitle: activity.startDate != null || activity.endDate != null
-              ? Text(
-                  activity.endDate != null
-                      ? _getFormattedDate(activity.endDate, isEndDate: true)
-                      : _getFormattedDate(activity.startDate, isEndDate: false),
-                )
-              : null,
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildDownloadStatus(
-                  context, activityProvider, connectivityProvider),
-              const SizedBox(width: 8),
-              const Icon(Icons.chevron_right, size: 20),
-            ],
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 8,
+            ),
+            leading: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: _getActivityColor().withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _getActivityColor().withOpacity(0.2),
+                  width: 1,
+                ),
+              ),
+              child: _buildActivityIcon(),
+            ),
+            title: Text(
+              activity.title,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                height: 1.2,
+              ),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (activity.startDate != null || activity.endDate != null) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.schedule,
+                        size: 14,
+                        color: Colors.grey[600],
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          activity.endDate != null
+                              ? _getFormattedDate(activity.endDate,
+                                  isEndDate: true)
+                              : _getFormattedDate(activity.startDate,
+                                  isEndDate: false),
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 13,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _getActivityColor().withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    _getActivityTypeLabel(),
+                    style: TextStyle(
+                      color: _getActivityColor(),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildDownloadStatus(
+                    context, activityProvider, connectivityProvider),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(
+                    Icons.chevron_right,
+                    size: 16,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+            onTap: () => _handleActivityTap(
+                context, activityProvider, connectivityProvider),
           ),
-          onTap: () => _handleActivityTap(
-              context, activityProvider, connectivityProvider),
         );
       },
     );
@@ -432,9 +512,40 @@ class ActivityListItem extends StatelessWidget {
       case ActivityType.ASSIGNMENT:
         return Colors.teal;
       case ActivityType.CONTENT:
-        return Colors.indigo;
+        return Colors.blue; // Cohérent avec la primaryColor
       default:
         return Colors.grey;
+    }
+  }
+
+  String _getActivityTypeLabel() {
+    if (activity is Resource) {
+      final resource = activity as Resource;
+      switch (resource.resourceType) {
+        case ResourceType.PDF:
+          return 'PDF';
+        case ResourceType.VIDEO:
+          return 'Vidéo';
+        case ResourceType.IMAGE:
+          return 'Image';
+        case ResourceType.LINK:
+          return 'Lien';
+        case ResourceType.FILE:
+          return 'Fichier';
+      }
+    }
+
+    switch (activity.type) {
+      case ActivityType.QUIZ:
+        return 'Quiz';
+      case ActivityType.ASSIGNMENT:
+        return 'Devoir';
+      case ActivityType.CONTENT:
+        return 'Contenu';
+      case ActivityType.RESOURCE:
+        return 'Ressource';
+      default:
+        return 'Activité';
     }
   }
 }

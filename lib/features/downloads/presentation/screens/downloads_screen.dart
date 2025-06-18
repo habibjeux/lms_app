@@ -511,8 +511,8 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                Colors.deepPurple,
-                Colors.deepPurple.withOpacity(0.8),
+                Theme.of(context).primaryColor,
+                Theme.of(context).primaryColor.withOpacity(0.8),
               ],
             ),
             borderRadius: BorderRadius.circular(16),
@@ -724,7 +724,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       appBar: AppBar(
         title: Text(
             widget.module != null ? 'Téléchargements' : 'Mes Téléchargements'),
-        backgroundColor: Colors.deepPurple,
+        backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [

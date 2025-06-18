@@ -20,6 +20,138 @@ class ActivityDetailScreen extends StatelessWidget {
     required this.activity,
   });
 
+  Widget _buildActivityHeader() {
+    final Color activityColor = _getActivityColor();
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            activityColor,
+            activityColor.withOpacity(0.8),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: activityColor.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: _buildActivityIcon(),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      activity.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        _getActivityTypeLabel(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (activity.startDate != null || activity.endDate != null) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  if (activity.startDate != null)
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.play_arrow,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Début: ${_formatDateTime(activity.startDate!)}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  if (activity.endDate != null) ...[
+                    if (activity.startDate != null) const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.stop,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Fin: ${_formatDateTime(activity.endDate!)}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildActivityContent(BuildContext context, bool isOffline) {
     switch (activity.type) {
       case ActivityType.RESOURCE:
@@ -27,7 +159,7 @@ class ActivityDetailScreen extends StatelessWidget {
           return _buildResourceContent(
               context, activity as Resource, isOffline);
         }
-        return const Center(child: Text('Ressource non disponible'));
+        return _buildEmptyContent('Ressource non disponible', Icons.error);
       case ActivityType.QUIZ:
         return _buildQuizContent(context);
       case ActivityType.ASSIGNMENT:
@@ -39,92 +171,211 @@ class ActivityDetailScreen extends StatelessWidget {
     }
   }
 
-  Widget _buildForumContent(BuildContext context) {
-    return const Center(child: Text('Contenu du forum à implémenter'));
-  }
-
-  Widget _buildResourceContent(
-      BuildContext context, Resource resource, bool isOffline) {
-    Widget resourceTypeIcon;
-    String resourceDescription;
-
-    switch (resource.resourceType) {
-      case ResourceType.PDF:
-        resourceTypeIcon =
-            const Icon(Icons.picture_as_pdf, size: 48, color: Colors.red);
-        resourceDescription = 'Document PDF';
-        break;
-      case ResourceType.VIDEO:
-        resourceTypeIcon =
-            const Icon(Icons.play_circle_fill, size: 48, color: Colors.blue);
-        resourceDescription = 'Vidéo';
-        break;
-      case ResourceType.IMAGE:
-        resourceTypeIcon =
-            const Icon(Icons.image, size: 48, color: Colors.green);
-        resourceDescription = 'Image';
-        break;
-      case ResourceType.LINK:
-        resourceTypeIcon =
-            const Icon(Icons.link, size: 48, color: Colors.purple);
-        resourceDescription = 'Lien externe';
-        break;
-      case ResourceType.FILE:
-        resourceTypeIcon =
-            const Icon(Icons.insert_drive_file, size: 48, color: Colors.grey);
-        resourceDescription = 'Fichier';
-    }
-
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  resourceTypeIcon,
-                  const SizedBox(height: 16),
-                  Text(
-                    resourceDescription,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  if (resource.fileSize != null) ...[
-                    const SizedBox(height: 8),
-                    Text('Taille: ${_formatFileSize(resource.fileSize!)}'),
-                  ],
-                  if (resource.mimeType != null) ...[
-                    const SizedBox(height: 8),
-                    Text('Type: ${resource.mimeType}'),
-                  ],
-                  const SizedBox(height: 16),
-                  _buildOpenButton(context, resource)
-                ],
+  Widget _buildEmptyContent(String message, IconData icon) {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Center(
+        child: Column(
+          children: [
+            Icon(icon, size: 48, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildOpenButton(BuildContext context, Resource resource) {
-    return ElevatedButton.icon(
-      onPressed: () => _openResource(context, resource),
-      icon: const Icon(Icons.folder_open),
-      label: const Text('Ouvrir'),
+  Widget _buildForumContent(BuildContext context) {
+    return _buildEmptyContent('Contenu du forum à implémenter', Icons.forum);
+  }
+
+  Widget _buildResourceContent(
+      BuildContext context, Resource resource, bool isOffline) {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color:
+                      _getResourceColor(resource.resourceType).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: _buildResourceIcon(resource.resourceType),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                _getResourceDescription(resource.resourceType),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (resource.fileSize != null || resource.mimeType != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[50],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: [
+                      if (resource.fileSize != null)
+                        Row(
+                          children: [
+                            Icon(Icons.data_usage,
+                                size: 16, color: Colors.grey[600]),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Taille: ${_formatFileSize(resource.fileSize!)}',
+                              style: TextStyle(color: Colors.grey[600]),
+                            ),
+                          ],
+                        ),
+                      if (resource.mimeType != null) ...[
+                        if (resource.fileSize != null)
+                          const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Icon(Icons.description,
+                                size: 16, color: Colors.grey[600]),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Type: ${resource.mimeType}',
+                              style: TextStyle(color: Colors.grey[600]),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _openResource(context, resource),
+                  icon: Icon(_getResourceOpenIcon(resource.resourceType)),
+                  label: Text(_getResourceOpenLabel(resource.resourceType)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _getResourceColor(resource.resourceType),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _buildOnlineButton(BuildContext context, Resource resource) {
-    final isLink = resource.resourceType == ResourceType.LINK;
-    return ElevatedButton.icon(
-      onPressed: () => _openResource(context, resource),
-      icon: Icon(isLink ? Icons.open_in_new : Icons.folder_open),
-      label: Text(isLink ? 'Ouvrir le lien' : 'Ouvrir'),
-    );
+  Widget _buildResourceIcon(ResourceType type) {
+    IconData iconData;
+    switch (type) {
+      case ResourceType.PDF:
+        iconData = Icons.picture_as_pdf;
+        break;
+      case ResourceType.VIDEO:
+        iconData = Icons.play_circle_fill;
+        break;
+      case ResourceType.IMAGE:
+        iconData = Icons.image;
+        break;
+      case ResourceType.LINK:
+        iconData = Icons.link;
+        break;
+      case ResourceType.FILE:
+        iconData = Icons.insert_drive_file;
+        break;
+    }
+    return Icon(iconData, size: 40, color: _getResourceColor(type));
+  }
+
+  Color _getResourceColor(ResourceType type) {
+    switch (type) {
+      case ResourceType.PDF:
+        return Colors.red;
+      case ResourceType.VIDEO:
+        return Colors.blue;
+      case ResourceType.IMAGE:
+        return Colors.green;
+      case ResourceType.LINK:
+        return Colors.purple;
+      case ResourceType.FILE:
+        return Colors.orange;
+    }
+  }
+
+  String _getResourceDescription(ResourceType type) {
+    switch (type) {
+      case ResourceType.PDF:
+        return 'Document PDF';
+      case ResourceType.VIDEO:
+        return 'Contenu vidéo';
+      case ResourceType.IMAGE:
+        return 'Image';
+      case ResourceType.LINK:
+        return 'Lien externe';
+      case ResourceType.FILE:
+        return 'Fichier';
+    }
+  }
+
+  IconData _getResourceOpenIcon(ResourceType type) {
+    switch (type) {
+      case ResourceType.LINK:
+        return Icons.open_in_new;
+      default:
+        return Icons.folder_open;
+    }
+  }
+
+  String _getResourceOpenLabel(ResourceType type) {
+    switch (type) {
+      case ResourceType.LINK:
+        return 'Ouvrir le lien';
+      default:
+        return 'Ouvrir';
+    }
   }
 
   Future<void> _openResource(BuildContext context, Resource resource) async {
@@ -153,7 +404,7 @@ class ActivityDetailScreen extends StatelessWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
               content: Text('Erreur lors de l\'ouverture de la ressource')),
         );
       }
@@ -170,26 +421,99 @@ class ActivityDetailScreen extends StatelessWidget {
   }
 
   Widget _buildQuizContent(BuildContext context) {
-    return const Center(child: Text('Contenu du quiz à implémenter'));
+    return _buildEmptyContent('Contenu du quiz à implémenter', Icons.quiz);
   }
 
   Widget _buildAssignmentContent(BuildContext context) {
     if (activity is Assignment) {
-      return AssignmentContentWidget(
-        assignment: activity as Assignment,
-      ).build(context);
-    } else {
-      return const Center(
-        child: Text(
-          'Type de devoir non pris en charge',
-          style: TextStyle(color: Colors.red),
-        ),
+      return Container(
+        margin: const EdgeInsets.all(16),
+        child: AssignmentContentWidget(
+          assignment: activity as Assignment,
+        ).build(context),
       );
+    } else {
+      return _buildEmptyContent(
+          'Type de devoir non pris en charge', Icons.error);
     }
   }
 
   Widget _buildContentActivity(BuildContext context) {
-    return const Center(child: Text('Contenu de l\'activité à implémenter'));
+    return _buildEmptyContent(
+        'Contenu de l\'activité à implémenter', Icons.article);
+  }
+
+  Color _getActivityColor() {
+    if (activity is Resource) {
+      final resource = activity as Resource;
+      return _getResourceColor(resource.resourceType);
+    }
+
+    switch (activity.type) {
+      case ActivityType.QUIZ:
+        return Colors.orange;
+      case ActivityType.ASSIGNMENT:
+        return Colors.teal;
+      case ActivityType.CONTENT:
+        return Colors.blue; // Utilisation cohérente avec la primaryColor
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Widget _buildActivityIcon() {
+    if (activity is Resource) {
+      final resource = activity as Resource;
+      return _buildResourceIcon(resource.resourceType);
+    }
+
+    IconData iconData;
+    switch (activity.type) {
+      case ActivityType.QUIZ:
+        iconData = Icons.quiz;
+        break;
+      case ActivityType.ASSIGNMENT:
+        iconData = Icons.assignment;
+        break;
+      case ActivityType.CONTENT:
+        iconData = Icons.subject;
+        break;
+      default:
+        iconData = Icons.article;
+        break;
+    }
+    return Icon(iconData, color: Colors.white, size: 24);
+  }
+
+  String _getActivityTypeLabel() {
+    if (activity is Resource) {
+      final resource = activity as Resource;
+      switch (resource.resourceType) {
+        case ResourceType.PDF:
+          return 'PDF';
+        case ResourceType.VIDEO:
+          return 'Vidéo';
+        case ResourceType.IMAGE:
+          return 'Image';
+        case ResourceType.LINK:
+          return 'Lien';
+        case ResourceType.FILE:
+          return 'Fichier';
+      }
+    }
+
+    switch (activity.type) {
+      case ActivityType.QUIZ:
+        return 'Quiz';
+      case ActivityType.ASSIGNMENT:
+        return 'Devoir';
+      case ActivityType.CONTENT:
+        return 'Contenu';
+      case ActivityType.RESOURCE:
+        return 'Ressource';
+      default:
+        return 'Activité';
+    }
   }
 
   @override
@@ -197,13 +521,26 @@ class ActivityDetailScreen extends StatelessWidget {
     return Consumer<ConnectivityProvider>(
       builder: (context, connectivity, _) {
         return Scaffold(
+          backgroundColor: Colors.grey[50],
           appBar: AppBar(
-            title: Text(activity.title),
+            backgroundColor: _getActivityColor(),
+            foregroundColor: Colors.white,
+            elevation: 0,
+            toolbarHeight: 40,
             actions: [
               if (!connectivity.isOnline)
-                const Padding(
-                  padding: EdgeInsets.all(8.0),
-                  child: Icon(Icons.offline_bolt, color: Colors.orange),
+                Container(
+                  margin: const EdgeInsets.only(right: 16),
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.offline_bolt,
+                    color: Colors.white,
+                    size: 16,
+                  ),
                 ),
             ],
           ),
@@ -211,29 +548,9 @@ class ActivityDetailScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (activity.startDate != null || activity.endDate != null)
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (activity.startDate != null)
-                              Text(
-                                  'Début: ${_formatDateTime(activity.startDate!)}'),
-                            if (activity.endDate != null) ...[
-                              const SizedBox(height: 8),
-                              Text(
-                                  'Fin: ${_formatDateTime(activity.endDate!)}'),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+                _buildActivityHeader(),
                 _buildActivityContent(context, !connectivity.isOnline),
+                const SizedBox(height: 20),
               ],
             ),
           ),
@@ -241,17 +558,6 @@ class ActivityDetailScreen extends StatelessWidget {
       },
     );
   }
-
-  /*Future<String> _downloadResource(String url, String fileName) async {
-    final directory = await getTemporaryDirectory();
-    final filePath = '${directory.path}/$fileName';
-
-    final dio = Dio();
-    print(url);
-    await dio.download(url, filePath);
-
-    return filePath;
-  }*/
 
   String _formatDateTime(DateTime date) {
     return '${date.day}/${date.month}/${date.year} à ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
