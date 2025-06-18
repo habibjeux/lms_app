@@ -8,6 +8,9 @@ import '../../models/assignment_submission.dart';
 import '../../../../core/widgets/loading_indicator.dart';
 import '../../../../core/widgets/error_message.dart';
 import '../../../../core/widgets/buttons/primary_button.dart';
+import '../../../../core/helper/DateHelper.dart';
+import '../../../../core/helper/ResourceViewerHelper.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import '../../../../core/providers/connectivity_provider.dart';
 import '../../../../core/widgets/connectivity/offline_banner.dart';
@@ -46,7 +49,15 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
 
   Future<void> _loadAssignment() async {
     final provider = Provider.of<AssignmentProvider>(context, listen: false);
-    await provider.loadAssignment(widget.assignmentId);
+    final connectivityProvider =
+        Provider.of<ConnectivityProvider>(context, listen: false);
+
+    if (connectivityProvider.isOnline) {
+      await provider.loadAssignment(widget.assignmentId);
+    } else {
+      // En mode hors ligne, utiliser la méthode spécifique
+      await provider.loadOfflineAssignment(widget.assignmentId);
+    }
   }
 
   Future<void> _checkDownloadStatus() async {
@@ -139,7 +150,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
     }
 
     return RefreshIndicator(
-      onRefresh: () => provider.refresh(widget.assignmentId),
+      onRefresh: () => _loadAssignment(),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(8),
         child: Column(
@@ -340,29 +351,193 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
             ),
             if (assignment.attachments.isNotEmpty) ...[
               const SizedBox(height: 16),
-              Text(
-                'Pièces jointes',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              const SizedBox(height: 8),
-              ...assignment.attachments.map(
-                (attachment) => ListTile(
-                  leading: const Icon(Icons.attachment),
-                  title: Text(attachment.filename),
-                  trailing: const Icon(Icons.download),
-                  onTap: () {
-                    // TODO: Télécharger la pièce jointe
-                  },
-                ),
-              ),
+              _buildAttachmentsSection(assignment.attachments),
             ],
             const SizedBox(height: 16),
             _buildAssignmentRequirements(assignment),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildAttachmentsSection(List<dynamic> attachments) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.attach_file,
+              color: Colors.teal,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Pièces jointes (${attachments.length})',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal,
+                  ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.teal.withOpacity(0.05),
+                Colors.teal.withOpacity(0.02),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Colors.teal.withOpacity(0.2),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            children: attachments.asMap().entries.map((entry) {
+              final index = entry.key;
+              final attachment = entry.value;
+              final isLast = index == attachments.length - 1;
+
+              return Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft:
+                        index == 0 ? const Radius.circular(12) : Radius.zero,
+                    topRight:
+                        index == 0 ? const Radius.circular(12) : Radius.zero,
+                    bottomLeft:
+                        isLast ? const Radius.circular(12) : Radius.zero,
+                    bottomRight:
+                        isLast ? const Radius.circular(12) : Radius.zero,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: _getFileColor(attachment.filename)
+                              .withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          _getFileIcon(attachment.filename),
+                          color: _getFileColor(attachment.filename),
+                          size: 20,
+                        ),
+                      ),
+                      title: Text(
+                        attachment.filename,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 15,
+                        ),
+                      ),
+                      subtitle: attachment.fileSize != null
+                          ? Text(
+                              _formatFileSize(attachment.fileSize),
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 13,
+                              ),
+                            )
+                          : null,
+                      trailing:
+                          Consumer2<AssignmentProvider, ConnectivityProvider>(
+                        builder:
+                            (context, provider, connectivityProvider, child) {
+                          final attachmentId = attachment.id?.toString() ??
+                              attachment.filename?.toString() ??
+                              '';
+                          final isDownloading =
+                              provider.isDownloadingAttachment(attachmentId);
+                          final isDownloaded =
+                              provider.isAttachmentDownloaded(attachmentId);
+                          final isOnline = connectivityProvider.isOnline;
+
+                          // Vérifier le statut au chargement
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            provider.checkAttachmentStatus(attachmentId);
+                          });
+
+                          if (isDownloading) {
+                            return const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                              ),
+                            );
+                          }
+
+                          return Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                onPressed: () => _openAttachment(attachment),
+                                icon: Icon(
+                                  Icons.open_in_new,
+                                  color: Colors.teal,
+                                  size: 20,
+                                ),
+                                tooltip: 'Ouvrir',
+                              ),
+                              if (isOnline && !isDownloaded) ...[
+                                IconButton(
+                                  onPressed: () =>
+                                      _downloadAttachment(attachment),
+                                  icon: Icon(
+                                    Icons.download,
+                                    color: Colors.blue,
+                                    size: 20,
+                                  ),
+                                  tooltip: 'Télécharger',
+                                ),
+                              ] else if (isDownloaded) ...[
+                                Icon(
+                                  Icons.offline_pin,
+                                  color: Colors.green,
+                                  size: 20,
+                                ),
+                              ] else if (!isOnline) ...[
+                                Icon(
+                                  Icons.cloud_off,
+                                  color: Colors.grey,
+                                  size: 20,
+                                ),
+                              ],
+                            ],
+                          );
+                        },
+                      ),
+                      onTap: () => _handleAttachmentTap(attachment),
+                    ),
+                    if (!isLast)
+                      Container(
+                        height: 1,
+                        margin: const EdgeInsets.symmetric(horizontal: 16),
+                        color: Colors.grey[200],
+                      ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
     );
   }
 
@@ -530,20 +705,8 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
           const SizedBox(height: 12),
         ],
         if (submission.files.isNotEmpty) ...[
-          Text(
-            'Fichiers soumis:',
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-          const SizedBox(height: 8),
-          ...submission.files.map(
-            (filePath) => ListTile(
-              leading: const Icon(Icons.attach_file),
-              title: Text(filePath.split('/').last),
-              dense: true,
-            ),
-          ),
+          const SizedBox(height: 16),
+          _buildSubmittedFilesSection(submission.files),
           const SizedBox(height: 16),
         ],
         if (isOnline)
@@ -781,6 +944,473 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
         ],
       ),
     );
+  }
+
+  // Méthodes pour les pièces jointes
+  Color _getFileColor(String filename) {
+    final extension = filename.toLowerCase().split('.').last;
+    switch (extension) {
+      case 'pdf':
+        return Colors.red;
+      case 'doc':
+      case 'docx':
+        return Colors.blue;
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'gif':
+        return Colors.green;
+      case 'mp4':
+      case 'avi':
+      case 'mov':
+        return Colors.purple;
+      case 'txt':
+        return Colors.grey;
+      default:
+        return Colors.orange;
+    }
+  }
+
+  IconData _getFileIcon(String filename) {
+    final extension = filename.toLowerCase().split('.').last;
+    switch (extension) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'doc':
+      case 'docx':
+        return Icons.description;
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'gif':
+        return Icons.image;
+      case 'mp4':
+      case 'avi':
+      case 'mov':
+        return Icons.video_library;
+      case 'txt':
+        return Icons.text_snippet;
+      default:
+        return Icons.insert_drive_file;
+    }
+  }
+
+  Future<void> _openAttachment(dynamic attachment) async {
+    try {
+      final provider = Provider.of<AssignmentProvider>(context, listen: false);
+      final connectivityProvider =
+          Provider.of<ConnectivityProvider>(context, listen: false);
+      // Utiliser la même méthode que dans le provider pour l'ID
+      final attachmentId =
+          attachment.id?.toString() ?? attachment.filename?.toString() ?? '';
+      final isOnline = connectivityProvider.isOnline;
+
+      print(
+          "🔍 Tentative d'ouverture pièce jointe: $attachmentId (${attachment.filename})");
+      print("📱 Mode: ${isOnline ? 'en ligne' : 'hors ligne'}");
+
+      // En mode hors ligne, utiliser UNIQUEMENT les fichiers locaux
+      if (!isOnline) {
+        print("🔒 Mode hors ligne - Vérification fichier local uniquement");
+        if (provider.isAttachmentDownloaded(attachmentId)) {
+          print("✅ Pièce jointe marquée comme téléchargée");
+          final attachmentInfo =
+              await provider.getAttachmentLocalPath(attachmentId);
+          if (attachmentInfo != null && attachmentInfo['localPath'] != null) {
+            print("📂 Ouverture depuis: ${attachmentInfo['localPath']}");
+            await ResourceViewerHelper.openResource(
+              context: context,
+              resourcePath: attachmentInfo['localPath'],
+              title: attachment.filename,
+            );
+          } else {
+            print("❌ Chemin local introuvable dans les métadonnées");
+            throw Exception(
+                'Fichier non disponible hors ligne. Le téléchargement n\'a peut-être pas abouti.');
+          }
+        } else {
+          print("❌ Pièce jointe non marquée comme téléchargée");
+          throw Exception('Fichier non téléchargé. Non disponible hors ligne.');
+        }
+      } else {
+        print("🌐 Mode en ligne - Privilégier local puis serveur");
+        // En mode en ligne, privilégier le fichier local s'il existe, sinon le serveur
+        if (provider.isAttachmentDownloaded(attachmentId)) {
+          print("✅ Pièce jointe téléchargée - tentative ouverture locale");
+          final attachmentInfo =
+              await provider.getAttachmentLocalPath(attachmentId);
+          if (attachmentInfo != null && attachmentInfo['localPath'] != null) {
+            print(
+                "📂 Ouverture depuis fichier local: ${attachmentInfo['localPath']}");
+            await ResourceViewerHelper.openResource(
+              context: context,
+              resourcePath: attachmentInfo['localPath'],
+              title: attachment.filename,
+            );
+          } else {
+            print(
+                "⚠️ Fichier marqué téléchargé mais introuvable - fallback serveur");
+            // Fichier marqué comme téléchargé mais introuvable, essayer le serveur
+            await _openAttachmentFromServer(attachment);
+          }
+        } else {
+          print("🌐 Pièce jointe non téléchargée - ouverture depuis serveur");
+          // Pas téléchargé, ouvrir depuis le serveur
+          await _openAttachmentFromServer(attachment);
+        }
+      }
+    } catch (e) {
+      print("❌ Erreur ouverture pièce jointe: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors de l\'ouverture: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _openAttachmentFromServer(dynamic attachment) async {
+    if (attachment.url != null && attachment.url.isNotEmpty) {
+      final serverUrl = dotenv.env['SERVER_URL'] ?? '';
+      final fullUrl = attachment.url.startsWith('http')
+          ? attachment.url
+          : '$serverUrl${attachment.url}';
+
+      await ResourceViewerHelper.openResource(
+        context: context,
+        resourcePath: fullUrl,
+        title: attachment.filename,
+      );
+    } else {
+      throw Exception('URL de la pièce jointe non disponible.');
+    }
+  }
+
+  Future<void> _downloadAttachment(dynamic attachment) async {
+    try {
+      final provider = Provider.of<AssignmentProvider>(context, listen: false);
+      await provider.downloadAttachment(attachment);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${attachment.filename} téléchargé avec succès'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors du téléchargement: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _handleAttachmentTap(dynamic attachment) {
+    // Pour l'instant, on ouvre le fichier
+    _openAttachment(attachment);
+  }
+
+  Widget _buildSubmittedFilesSection(List<String> files) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.upload_file,
+              color: Colors.green,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Fichiers soumis (${files.length})',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.green.withOpacity(0.05),
+                Colors.green.withOpacity(0.02),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Colors.green.withOpacity(0.2),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            children: files.asMap().entries.map((entry) {
+              final index = entry.key;
+              final filePath = entry.value;
+              final filename = filePath.split('/').last;
+              final isLast = index == files.length - 1;
+
+              return Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft:
+                        index == 0 ? const Radius.circular(12) : Radius.zero,
+                    topRight:
+                        index == 0 ? const Radius.circular(12) : Radius.zero,
+                    bottomLeft:
+                        isLast ? const Radius.circular(12) : Radius.zero,
+                    bottomRight:
+                        isLast ? const Radius.circular(12) : Radius.zero,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: _getFileColor(filename).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          _getFileIcon(filename),
+                          color: _getFileColor(filename),
+                          size: 20,
+                        ),
+                      ),
+                      title: Text(
+                        filename,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 15,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Fichier soumis',
+                        style: TextStyle(
+                          color: Colors.green[600],
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      trailing:
+                          Consumer2<AssignmentProvider, ConnectivityProvider>(
+                        builder:
+                            (context, provider, connectivityProvider, child) {
+                          final isDownloading =
+                              provider.isDownloadingSubmissionFile(filePath);
+                          final isDownloaded =
+                              provider.isSubmissionFileDownloaded(filePath);
+                          final isOnline = connectivityProvider.isOnline;
+
+                          // Vérifier le statut au chargement
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            provider.checkSubmissionFileStatus(filePath);
+                          });
+
+                          if (isDownloading) {
+                            return const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                              ),
+                            );
+                          }
+
+                          return Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                onPressed: () => _openSubmittedFile(filePath),
+                                icon: Icon(
+                                  Icons.open_in_new,
+                                  color: Colors.green,
+                                  size: 20,
+                                ),
+                                tooltip: 'Ouvrir',
+                              ),
+                              if (isOnline && !isDownloaded) ...[
+                                IconButton(
+                                  onPressed: () =>
+                                      _downloadSubmittedFile(filePath),
+                                  icon: Icon(
+                                    Icons.download,
+                                    color: Colors.blue,
+                                    size: 20,
+                                  ),
+                                  tooltip: 'Télécharger',
+                                ),
+                              ] else if (isDownloaded) ...[
+                                Icon(
+                                  Icons.check_circle,
+                                  color: Colors.green,
+                                  size: 20,
+                                ),
+                              ] else if (!isOnline) ...[
+                                Icon(
+                                  Icons.cloud_off,
+                                  color: Colors.grey,
+                                  size: 20,
+                                ),
+                              ],
+                            ],
+                          );
+                        },
+                      ),
+                      onTap: () => _openSubmittedFile(filePath),
+                    ),
+                    if (!isLast)
+                      Container(
+                        height: 1,
+                        margin: const EdgeInsets.symmetric(horizontal: 16),
+                        color: Colors.grey[200],
+                      ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _openSubmittedFile(String filePath) async {
+    try {
+      final provider = Provider.of<AssignmentProvider>(context, listen: false);
+      final connectivityProvider =
+          Provider.of<ConnectivityProvider>(context, listen: false);
+      final filename = filePath.split('/').last;
+      final isOnline = connectivityProvider.isOnline;
+
+      print("🔍 Tentative d'ouverture fichier soumis: $filePath");
+      print("📱 Mode: ${isOnline ? 'en ligne' : 'hors ligne'}");
+      print("📄 Soumission actuelle ID: ${provider.currentSubmission?.id}");
+
+      // En mode hors ligne, utiliser UNIQUEMENT les fichiers locaux
+      if (!isOnline) {
+        print("🔒 Mode hors ligne - Vérification fichier local uniquement");
+        if (provider.isSubmissionFileDownloaded(filePath)) {
+          print("✅ Fichier soumis marqué comme téléchargé");
+          final fileInfo = await provider.getSubmissionFileLocalPath(filePath);
+          print("📂 Informations récupérées: $fileInfo");
+          if (fileInfo != null && fileInfo['localPath'] != null) {
+            print("📂 Tentative d'ouverture depuis: ${fileInfo['localPath']}");
+            await ResourceViewerHelper.openResource(
+              context: context,
+              resourcePath: fileInfo['localPath'],
+              title: filename,
+            );
+          } else {
+            print("❌ Chemin local introuvable dans les métadonnées");
+            throw Exception(
+                'Fichier non disponible hors ligne. Le téléchargement n\'a peut-être pas abouti.');
+          }
+        } else {
+          print("❌ Fichier soumis non marqué comme téléchargé");
+          throw Exception('Fichier non téléchargé. Non disponible hors ligne.');
+        }
+      } else {
+        print("🌐 Mode en ligne - Privilégier local puis serveur");
+        // En mode en ligne, privilégier le fichier local s'il existe, sinon le serveur
+        if (provider.isSubmissionFileDownloaded(filePath)) {
+          print("✅ Fichier soumis téléchargé - tentative ouverture locale");
+          final fileInfo = await provider.getSubmissionFileLocalPath(filePath);
+          print("📂 Informations récupérées: $fileInfo");
+          if (fileInfo != null && fileInfo['localPath'] != null) {
+            print(
+                "📂 Ouverture depuis fichier local: ${fileInfo['localPath']}");
+            await ResourceViewerHelper.openResource(
+              context: context,
+              resourcePath: fileInfo['localPath'],
+              title: filename,
+            );
+          } else {
+            print(
+                "⚠️ Fichier marqué téléchargé mais introuvable - fallback serveur");
+            // Fichier marqué comme téléchargé mais introuvable, essayer le serveur
+            await _openSubmittedFileFromServer(filePath);
+          }
+        } else {
+          print("🌐 Fichier soumis non téléchargé - ouverture depuis serveur");
+          // Pas téléchargé, ouvrir depuis le serveur
+          await _openSubmittedFileFromServer(filePath);
+        }
+      }
+    } catch (e) {
+      print("❌ Erreur ouverture fichier soumis: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors de l\'ouverture: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _openSubmittedFileFromServer(String filePath) async {
+    final filename = filePath.split('/').last;
+
+    // Si c'est un chemin relatif (commence par /), ajouter l'URL du serveur
+    String resourcePath = filePath;
+    if (filePath.startsWith('/') && !filePath.startsWith('http')) {
+      final serverUrl = dotenv.env['SERVER_URL'] ?? '';
+      resourcePath = '$serverUrl$filePath';
+    }
+
+    await ResourceViewerHelper.openResource(
+      context: context,
+      resourcePath: resourcePath,
+      title: filename,
+    );
+  }
+
+  Future<void> _downloadSubmittedFile(String filePath) async {
+    try {
+      final provider = Provider.of<AssignmentProvider>(context, listen: false);
+      await provider.downloadSubmissionFile(filePath);
+
+      if (mounted) {
+        final filename = filePath.split('/').last;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$filename téléchargé avec succès'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors du téléchargement: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _downloadAssignment() async {

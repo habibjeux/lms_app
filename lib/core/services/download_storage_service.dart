@@ -188,12 +188,16 @@ class DownloadStorageService {
       final chaptersBox = await _getChaptersBox();
       final quizzesBox = await _getQuizzesBox();
       final assignmentsBox = await _getAssignmentsBox();
+      final attachmentsBox = await _getAttachmentsBox();
+      final submissionFilesBox = await _getSubmissionFilesBox();
 
       print('Contenu des boîtes:');
       print('Ressources: ${resourcesBox.toMap()}');
       print('Chapitres: ${chaptersBox.toMap()}');
       print('Quiz: ${quizzesBox.toMap()}');
       print('Assignments: ${assignmentsBox.toMap()}');
+      print('Attachments: ${attachmentsBox.toMap()}');
+      print('Submission Files: ${submissionFilesBox.toMap()}');
 
       final List<Map<String, dynamic>> items = [];
 
@@ -247,6 +251,28 @@ class DownloadStorageService {
         }
       }
 
+      // Récupérer les pièces jointes
+      for (var key in attachmentsBox.keys) {
+        final data = attachmentsBox.get(key);
+        if (data is Map) {
+          items.add({
+            'id': key.toString(),
+            ...Map<String, dynamic>.from(data),
+          });
+        }
+      }
+
+      // Récupérer les fichiers soumis
+      for (var key in submissionFilesBox.keys) {
+        final data = submissionFilesBox.get(key);
+        if (data is Map) {
+          items.add({
+            'id': key.toString(),
+            ...Map<String, dynamic>.from(data),
+          });
+        }
+      }
+
       print('Éléments téléchargés récupérés: ${items.length} éléments');
       return items;
     } catch (e) {
@@ -275,6 +301,14 @@ class DownloadStorageService {
           final box = await _getAssignmentsBox();
           await box.delete(id);
           break;
+        case 'attachment':
+          final box = await _getAttachmentsBox();
+          await box.delete(id);
+          break;
+        case 'submission_file':
+          final box = await _getSubmissionFilesBox();
+          await box.delete(id);
+          break;
       }
       print('Élément supprimé avec succès: $id');
     } catch (e) {
@@ -290,11 +324,15 @@ class DownloadStorageService {
       final chaptersBox = await _getChaptersBox();
       final quizzesBox = await _getQuizzesBox();
       final assignmentsBox = await _getAssignmentsBox();
+      final attachmentsBox = await _getAttachmentsBox();
+      final submissionFilesBox = await _getSubmissionFilesBox();
 
       await resourcesBox.clear();
       await chaptersBox.clear();
       await quizzesBox.clear();
       await assignmentsBox.clear();
+      await attachmentsBox.clear();
+      await submissionFilesBox.clear();
 
       print('Tous les téléchargements ont été supprimés');
     } catch (e) {
@@ -339,5 +377,135 @@ class DownloadStorageService {
   Future<void> deleteAssignment(String assignmentId) async {
     final box = await _getAssignmentsBox();
     await box.delete(assignmentId);
+  }
+
+  // Méthodes pour les pièces jointes
+  Future<Box> _getAttachmentsBox() async {
+    final boxName = 'attachments_${_currentUserId ?? 'default'}';
+    return await Hive.openBox(boxName);
+  }
+
+  Future<void> saveAttachment(dynamic attachment, String moduleId,
+      String? chapterId, String assignmentId,
+      {String? localPath}) async {
+    try {
+      final box = await _getAttachmentsBox();
+      final attachmentId = attachment.id ?? attachment.filename;
+
+      // Utiliser le chemin fourni ou générer un chemin par défaut
+      final filePath = localPath ??
+          'attachments/$moduleId/$assignmentId/${attachment.filename}';
+
+      await box.put(attachmentId, {
+        'id': attachmentId,
+        'filename': attachment.filename,
+        'fileSize': attachment.fileSize,
+        'url': attachment.url ?? '',
+        'localPath': filePath,
+        'moduleId': moduleId,
+        'chapterId': chapterId,
+        'assignmentId': assignmentId,
+        'type': 'attachment',
+        'downloadedAt': DateTime.now().toIso8601String(),
+      });
+
+      print(
+          'Pièce jointe sauvegardée: $attachmentId avec chemin local: $filePath');
+    } catch (e) {
+      print('Erreur lors de la sauvegarde de la pièce jointe: $e');
+      rethrow;
+    }
+  }
+
+  Future<bool> isAttachmentDownloaded(String attachmentId) async {
+    final box = await _getAttachmentsBox();
+    return box.containsKey(attachmentId);
+  }
+
+  Future<Map<String, dynamic>?> getAttachmentInfo(String attachmentId) async {
+    final box = await _getAttachmentsBox();
+    final data = box.get(attachmentId);
+    if (data is Map) {
+      return Map<String, dynamic>.from(data);
+    }
+    return null;
+  }
+
+  Future<void> deleteAttachment(String attachmentId) async {
+    final box = await _getAttachmentsBox();
+    await box.delete(attachmentId);
+  }
+
+  // Méthodes pour les fichiers soumis
+  Future<Box> _getSubmissionFilesBox() async {
+    final boxName = 'submission_files_${_currentUserId ?? 'default'}';
+    return await Hive.openBox(boxName);
+  }
+
+  Future<void> saveSubmissionFile(
+      String filePath, String assignmentId, String submissionId,
+      {String? localPath}) async {
+    try {
+      final box = await _getSubmissionFilesBox();
+      final fileId = '$submissionId-${filePath.split('/').last}';
+
+      // Utiliser le chemin fourni ou le chemin original
+      final storedPath = localPath ?? filePath;
+
+      print('💾 Sauvegarde fichier soumis:');
+      print('   - filePath: $filePath');
+      print('   - assignmentId: $assignmentId');
+      print('   - submissionId: $submissionId');
+      print('   - fileId généré: $fileId');
+      print('   - localPath: $storedPath');
+
+      await box.put(fileId, {
+        'id': fileId,
+        'originalPath': filePath,
+        'localPath': storedPath,
+        'filename': filePath.split('/').last,
+        'assignmentId': assignmentId,
+        'submissionId': submissionId,
+        'type': 'submission_file',
+        'downloadedAt': DateTime.now().toIso8601String(),
+      });
+
+      print(
+          '✅ Fichier soumis sauvegardé avec succès: $fileId avec chemin: $storedPath');
+      print('📦 Clés actuelles dans la boîte: ${box.keys.toList()}');
+    } catch (e) {
+      print('❌ Erreur lors de la sauvegarde du fichier soumis: $e');
+      rethrow;
+    }
+  }
+
+  Future<bool> isSubmissionFileDownloaded(
+      String filePath, String submissionId) async {
+    final box = await _getSubmissionFilesBox();
+    final fileId = '$submissionId-${filePath.split('/').last}';
+    return box.containsKey(fileId);
+  }
+
+  Future<Map<String, dynamic>?> getSubmissionFileInfo(
+      String filePath, String submissionId) async {
+    final box = await _getSubmissionFilesBox();
+    final fileId = '$submissionId-${filePath.split('/').last}';
+    print("🔍 Recherche dans Hive avec ID: '$fileId'");
+    print("📦 Contenu de la boîte submission_files: ${box.keys.toList()}");
+
+    final data = box.get(fileId);
+    print("📂 Données trouvées pour '$fileId': $data");
+
+    if (data is Map) {
+      return Map<String, dynamic>.from(data);
+    }
+    return null;
+  }
+
+  Future<void> deleteSubmissionFile(
+      String filePath, String submissionId) async {
+    final box = await _getSubmissionFilesBox();
+    final fileId = '$submissionId-${filePath.split('/').last}';
+    await box.delete(fileId);
   }
 }

@@ -61,12 +61,21 @@ class AssignmentRepository {
         final response =
             await _api.get('/assignments/$assignmentId/my-submission');
         if (response.statusCode == 200 && response.data != null) {
-          return AssignmentSubmission.fromJson(response.data);
+          final submission = AssignmentSubmission.fromJson(response.data);
+
+          // Sauvegarder la soumission localement pour utilisation hors ligne
+          await saveSubmissionLocally(assignmentId, submission);
+          print(
+              '📝 Soumission récupérée depuis l\'API et sauvegardée localement: $assignmentId');
+
+          return submission;
         }
       } else {
         // Hors ligne - vérifier s'il y a une soumission synchronisée localement
         final localSubmission = await _getLocalSubmission(assignmentId);
         if (localSubmission != null) {
+          print(
+              '📝 Soumission trouvée localement en mode hors ligne: $assignmentId');
           return localSubmission;
         }
       }
@@ -398,6 +407,18 @@ class AssignmentRepository {
       }
       // Pour toutes les autres erreurs, on relance l'originale
       rethrow;
+    }
+  }
+
+  // Sauvegarder une soumission synchronisée localement
+  Future<void> saveSubmissionLocally(
+      String assignmentId, AssignmentSubmission submission) async {
+    try {
+      final localBox = await Hive.openBox('synchronized_submissions');
+      await localBox.put(assignmentId, submission.toJson());
+      print('💾 Soumission sauvegardée localement: $assignmentId');
+    } catch (e) {
+      print('❌ Erreur lors de la sauvegarde locale de la soumission: $e');
     }
   }
 }

@@ -60,4 +60,8 @@ class AssignmentAttachment extends BaseModel {
       'mimeType': mimeType
     };
   }
+
+  String _getAttachmentId(dynamic attachment) {
+    return attachment.id?.toString() ?? attachment.filename?.toString() ?? '';
+  }
 }
