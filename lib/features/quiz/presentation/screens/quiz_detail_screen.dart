@@ -18,20 +18,92 @@ class QuizDetailScreen extends StatefulWidget {
 }
 
 class _QuizDetailScreenState extends State<QuizDetailScreen> {
+  bool _isDownloaded = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<QuizProvider>().loadQuiz(widget.quizId);
+      _checkDownloadStatus();
     });
+  }
+
+  Future<void> _checkDownloadStatus() async {
+    final provider = context.read<QuizProvider>();
+    final downloaded = await provider.isQuizDownloaded(widget.quizId);
+    if (mounted) {
+      setState(() {
+        _isDownloaded = downloaded;
+      });
+    }
+  }
+
+  Future<void> _downloadQuiz(QuizProvider provider) async {
+    try {
+      await provider.downloadQuizForOffline(widget.quizId);
+      if (mounted) {
+        setState(() {
+          _isDownloaded = true;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Quiz téléchargé avec succès !'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors du téléchargement: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text('Quiz'),
+        backgroundColor: Colors.orange,
+        foregroundColor: Colors.white,
         elevation: 0,
+        toolbarHeight: 40,
+        actions: [
+          Consumer<QuizProvider>(
+            builder: (context, quizProvider, child) {
+              final isDownloading = quizProvider.isDownloading;
+
+              return IconButton(
+                onPressed: _isDownloaded || isDownloading
+                    ? null
+                    : () => _downloadQuiz(quizProvider),
+                icon: isDownloading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : _isDownloaded
+                        ? const Icon(Icons.offline_pin, color: Colors.white)
+                        : const Icon(Icons.download),
+                tooltip: _isDownloaded
+                    ? 'Quiz téléchargé'
+                    : isDownloading
+                        ? 'Téléchargement en cours...'
+                        : 'Télécharger le quiz',
+              );
+            },
+          ),
+        ],
       ),
       body: Consumer2<QuizProvider, ConnectivityProvider>(
         builder: (context, quizProvider, connectivityProvider, child) {
@@ -82,98 +154,202 @@ class _QuizDetailScreenState extends State<QuizDetailScreen> {
             );
           }
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Titre et informations de base
-                _buildHeader(quiz),
-                const SizedBox(height: 24),
+          return Column(
+            children: [
+              const SizedBox(height: 8),
+              _buildQuizHeader(quiz),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Informations détaillées
+                      _buildQuizInfo(quiz),
+                      const SizedBox(height: 16),
 
-                // Informations détaillées
-                _buildQuizInfo(quiz),
-                const SizedBox(height: 24),
+                      // Tentatives précédentes
+                      if (quizProvider.attempts.isNotEmpty) ...[
+                        _buildAttemptsSection(quizProvider.attempts),
+                        const SizedBox(height: 16),
+                      ],
 
-                // Tentatives précédentes
-                if (quizProvider.attempts.isNotEmpty) ...[
-                  _buildAttemptsSection(quizProvider.attempts),
-                  const SizedBox(height: 24),
-                ],
-
-                // Boutons d'action
-                _buildActionButtons(
-                    context, quiz, quizProvider, connectivityProvider),
-              ],
-            ),
+                      // Boutons d'action
+                      _buildActionButtons(
+                          context, quiz, quizProvider, connectivityProvider),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           );
         },
       ),
     );
   }
 
-  Widget _buildHeader(Quiz quiz) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.quiz,
-                  color: Theme.of(context).primaryColor,
-                  size: 28,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    quiz.title,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                  ),
-                ),
-              ],
-            ),
-            if (!quiz.isAvailable) ...[
-              const SizedBox(height: 12),
+  Widget _buildQuizHeader(Quiz quiz) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.orange,
+            Colors.orange.withOpacity(0.8),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.orange.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.all(15),
                 decoration: BoxDecoration(
-                  color: Colors.orange[100],
-                  borderRadius: BorderRadius.circular(12),
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(15),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+                child: const Icon(
+                  Icons.quiz,
+                  color: Colors.white,
+                  size: 30,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      quiz.isExpired ? Icons.schedule : Icons.lock,
-                      size: 16,
-                      color: Colors.orange[700],
-                    ),
-                    const SizedBox(width: 4),
                     Text(
-                      quiz.isExpired ? 'Expiré' : 'Non disponible',
-                      style: TextStyle(
-                        color: Colors.orange[700],
-                        fontWeight: FontWeight.w500,
+                      quiz.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${quiz.maxScore.toStringAsFixed(1)} points',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 16),
+          if (quiz.startDate != null || quiz.endDate != null) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  if (quiz.startDate != null)
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.event,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Disponible à partir du: ${_formatDate(quiz.startDate!)}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  if (quiz.endDate != null) ...[
+                    if (quiz.startDate != null) const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.event_busy,
+                          color:
+                              quiz.isExpired ? Colors.red[200] : Colors.white,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Disponible jusqu\'au: ${_formatDate(quiz.endDate!)}',
+                          style: TextStyle(
+                            color:
+                                quiz.isExpired ? Colors.red[200] : Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ],
-        ),
+          if (!quiz.isAvailable) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: quiz.isExpired
+                    ? Colors.red.withOpacity(0.2)
+                    : Colors.blue.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                quiz.isExpired ? 'Quiz expiré' : 'Quiz non disponible',
+                style: TextStyle(
+                  color:
+                      quiz.isExpired ? Colors.red[200] : Colors.lightBlue[200],
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
 
   Widget _buildQuizInfo(Quiz quiz) {
     return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -268,6 +444,9 @@ class _QuizDetailScreenState extends State<QuizDetailScreen> {
 
   Widget _buildAttemptsSection(List attempts) {
     return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -288,20 +467,47 @@ class _QuizDetailScreenState extends State<QuizDetailScreen> {
   }
 
   Widget _buildAttemptItem(dynamic attempt) {
+    final Color statusColor =
+        attempt.isCompleted ? Colors.green : Colors.orange;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[200]!),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            statusColor.withOpacity(0.1),
+            statusColor.withOpacity(0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: statusColor.withOpacity(0.2),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: statusColor.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.assignment_turned_in,
-            color: Colors.grey[600],
-            size: 20,
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              attempt.isCompleted ? Icons.check_circle : Icons.pending,
+              color: statusColor,
+              size: 20,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -310,32 +516,47 @@ class _QuizDetailScreenState extends State<QuizDetailScreen> {
               children: [
                 Text(
                   'Tentative du ${_formatDate(attempt.startDate)}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w500,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: statusColor,
+                    fontSize: 15,
                   ),
                 ),
+                const SizedBox(height: 4),
                 Text(
                   'Score: ${attempt.scoreText}',
                   style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 12,
+                    color: statusColor.withOpacity(0.8),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
                 if (attempt.endDate != null)
                   Text(
                     'Durée: ${attempt.timeSpentText}',
                     style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 12,
+                      color: statusColor.withOpacity(0.8),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
               ],
             ),
           ),
-          Icon(
-            attempt.isCompleted ? Icons.check_circle : Icons.pending,
-            color: attempt.isCompleted ? Colors.green : Colors.orange,
-            size: 20,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              attempt.isCompleted ? 'Terminé' : 'En cours',
+              style: TextStyle(
+                color: statusColor,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -348,66 +569,117 @@ class _QuizDetailScreenState extends State<QuizDetailScreen> {
     QuizProvider quizProvider,
     ConnectivityProvider connectivityProvider,
   ) {
-    return Column(
-      children: [
-        // Bouton principal
-        SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: ElevatedButton.icon(
-            onPressed: quiz.isAvailable && connectivityProvider.isOnline
-                ? () => _startQuiz(context, quizProvider)
-                : null,
-            icon: const Icon(Icons.play_arrow),
-            label: Text(
-              quiz.isAvailable
-                  ? 'Commencer le quiz'
-                  : quiz.isExpired
-                      ? 'Quiz expiré'
-                      : 'Quiz non disponible',
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).primaryColor,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          ),
-        ),
-
-        // Message hors ligne
-        if (!connectivityProvider.isOnline) ...[
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.orange[50],
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.orange[200]!),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.wifi_off,
-                  color: Colors.orange[700],
-                  size: 20,
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            // Bouton principal
+            Container(
+              width: double.infinity,
+              height: 48,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: quiz.isAvailable && connectivityProvider.isOnline
+                      ? [Colors.orange, Colors.orange.withOpacity(0.8)]
+                      : [Colors.grey[400]!, Colors.grey[300]!],
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Connexion Internet requise pour passer le quiz',
-                    style: TextStyle(
-                      color: Colors.orange[700],
-                      fontSize: 14,
-                    ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: quiz.isAvailable && connectivityProvider.isOnline
+                    ? [
+                        BoxShadow(
+                          color: Colors.orange.withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: ElevatedButton.icon(
+                onPressed: quiz.isAvailable && connectivityProvider.isOnline
+                    ? () => _startQuiz(context, quizProvider)
+                    : null,
+                icon: const Icon(Icons.play_arrow),
+                label: Text(
+                  quiz.isAvailable
+                      ? 'Commencer le quiz'
+                      : quiz.isExpired
+                          ? 'Quiz expiré'
+                          : 'Quiz non disponible',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
                   ),
                 ),
-              ],
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  foregroundColor: Colors.white,
+                  shadowColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
             ),
-          ),
-        ],
-      ],
+
+            // Message hors ligne
+            if (!connectivityProvider.isOnline) ...[
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.orange.withOpacity(0.1),
+                      Colors.orange.withOpacity(0.05),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.orange.withOpacity(0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.wifi_off,
+                        color: Colors.orange,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Connexion Internet requise pour passer le quiz',
+                        style: TextStyle(
+                          color: Colors.orange,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
