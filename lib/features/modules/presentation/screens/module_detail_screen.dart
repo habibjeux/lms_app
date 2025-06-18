@@ -5,7 +5,6 @@ import '../../providers/modules_provider.dart';
 import '../widgets/chapter_widget.dart';
 import '../widgets/module_activity.dart';
 import '../../../../core/services/sync_service.dart';
-import '../screens/downloads_screen.dart';
 
 class ModuleDetailScreen extends StatefulWidget {
   final Module module;
@@ -69,12 +68,11 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.download_done),
-            tooltip: 'Gérer les téléchargements',
-            onPressed: () => Navigator.push(
+            tooltip: 'Téléchargements de ce module',
+            onPressed: () => Navigator.pushNamed(
               context,
-              MaterialPageRoute(
-                builder: (context) => const DownloadsScreen(),
-              ),
+              '/downloads-module',
+              arguments: widget.module,
             ),
           ),
         ],

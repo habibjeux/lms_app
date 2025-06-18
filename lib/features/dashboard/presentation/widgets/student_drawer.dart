@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../auth/providers/auth_provider.dart';
+import '../../../downloads/presentation/screens/downloads_screen.dart';
 
 class StudentDrawer extends StatelessWidget {
   const StudentDrawer({super.key});
@@ -34,7 +35,13 @@ class StudentDrawer extends StatelessWidget {
             leading: const Icon(Icons.download),
             title: const Text('Téléchargements'),
             onTap: () {
-              // Navigation vers les téléchargements
+              Navigator.pop(context); // Fermer le drawer
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const DownloadsScreen(),
+                ),
+              );
             },
           ),
           const Divider(),

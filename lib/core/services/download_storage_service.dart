@@ -30,13 +30,15 @@ class DownloadStorageService {
   }
 
   Future<void> markChapterAsDownloaded(String chapterId,
-      {String? moduleId, String? title}) async {
+      {String? moduleId, String? title, String? moduleTitle}) async {
     try {
       print('Marquage du chapitre comme téléchargé: $chapterId');
       final box = await _getChaptersBox();
       await box.put(chapterId, {
         'moduleId': moduleId,
+        'moduleTitle': moduleTitle,
         'title': title,
+        'chapterTitle': title,
         'type': 'chapter',
         'downloadedAt': DateTime.now().toIso8601String(),
         'activities': <String>[],
@@ -49,13 +51,19 @@ class DownloadStorageService {
   }
 
   Future<void> markResourceAsDownloaded(String resourceId,
-      {String? moduleId, String? chapterId, String? title}) async {
+      {String? moduleId,
+      String? chapterId,
+      String? title,
+      String? moduleTitle,
+      String? chapterTitle}) async {
     try {
       print('Marquage de la ressource comme téléchargée: $resourceId');
       final box = await _getResourcesBox();
       await box.put(resourceId, {
         'moduleId': moduleId,
+        'moduleTitle': moduleTitle,
         'chapterId': chapterId,
+        'chapterTitle': chapterTitle,
         'title': title,
         'type': 'resource',
         'downloadedAt': DateTime.now().toIso8601String(),
@@ -69,13 +77,19 @@ class DownloadStorageService {
   }
 
   Future<void> markQuizAsDownloaded(String quizId,
-      {String? moduleId, String? chapterId, String? title}) async {
+      {String? moduleId,
+      String? chapterId,
+      String? title,
+      String? moduleTitle,
+      String? chapterTitle}) async {
     try {
       print('Marquage du quiz comme téléchargé: $quizId');
       final box = await _getQuizzesBox();
       await box.put(quizId, {
         'moduleId': moduleId,
+        'moduleTitle': moduleTitle,
         'chapterId': chapterId,
+        'chapterTitle': chapterTitle,
         'title': title,
         'type': 'quiz',
         'downloadedAt': DateTime.now().toIso8601String(),
@@ -100,7 +114,9 @@ class DownloadStorageService {
             activities.add(quizId);
             await chaptersBox.put(chapterId, {
               'moduleId': moduleId,
-              'title': title,
+              'moduleTitle': moduleTitle,
+              'title': chapterTitle ?? title,
+              'chapterTitle': chapterTitle ?? title,
               'type': 'chapter',
               'downloadedAt': DateTime.now().toIso8601String(),
               'activities': activities,
@@ -295,7 +311,15 @@ class DownloadStorageService {
   Future<void> markAssignmentAsDownloaded(
       String assignmentId, Map<String, dynamic> data) async {
     final box = await _getAssignmentsBox();
-    await box.put(assignmentId, data);
+
+    // S'assurer que les titres de module et chapitre sont inclus
+    final enrichedData = {
+      ...data,
+      'type': 'assignment',
+      'downloadedAt': DateTime.now().toIso8601String(),
+    };
+
+    await box.put(assignmentId, enrichedData);
   }
 
   Future<bool> isAssignmentDownloaded(String assignmentId) async {

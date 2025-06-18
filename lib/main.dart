@@ -15,6 +15,7 @@ import 'core/widgets/connectivity/connectivity_overlay.dart';
 import 'features/auth/presentation/widgets/auth_wrapper_first.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'features/downloads/providers/download_provider.dart';
+import 'features/downloads/presentation/screens/downloads_screen.dart';
 import 'features/meeting/providers/jitsi_meeting_provider.dart.dart';
 import 'features/meeting/providers/meetings_provider.dart';
 import 'features/modules/models/module.dart';
@@ -77,12 +78,19 @@ class MyApp extends StatelessWidget {
           routes: {
             '/modules': (context) => const ModulesScreen(),
             '/login': (context) => const LoginScreen(),
+            '/downloads': (context) => const DownloadsScreen(),
           },
           onGenerateRoute: (settings) {
             if (settings.name == '/module-detail') {
               final module = settings.arguments as Module;
               return MaterialPageRoute(
                 builder: (context) => ModuleDetailScreen(module: module),
+              );
+            }
+            if (settings.name == '/downloads-module') {
+              final module = settings.arguments as Module;
+              return MaterialPageRoute(
+                builder: (context) => DownloadsScreen(module: module),
               );
             }
             return null;
