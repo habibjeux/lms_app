@@ -1,14 +1,20 @@
 import 'package:flutter/foundation.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'dart:io';
 import '../../../../core/exceptions/app_exception.dart';
 import '../../../../core/services/sync_service.dart';
+import '../../../../core/services/download_storage_service.dart';
 import '../data/modules_repository.dart';
 import '../models/module.dart';
 import '../models/chapter.dart';
 import '../models/activity.dart';
+import '../models/enums/activity_type.dart';
+import '../models/enums/activity_scope.dart';
 
 class ModulesProvider with ChangeNotifier {
   final ModulesRepository _repository = ModulesRepository();
   final SyncService _syncService = SyncService();
+  final DownloadStorageService _downloadStorage = DownloadStorageService();
 
   List<Module> _modules = [];
   bool _isLoading = false;
@@ -138,21 +144,170 @@ class ModulesProvider with ChangeNotifier {
       throw AppException(message: 'Aucun module sélectionné');
     }
 
+    print("📚 Chargement des chapitres pour le module: ${_currentModule!.id}");
     _setLoading(true);
+
     try {
+      // Vérifier la connectivité
+      final isOnline = await _isOnline();
+      print(
+          "📱 Mode de chargement chapitres: ${isOnline ? 'en ligne' : 'hors ligne'}");
+
+      if (!isOnline) {
+        // Mode hors ligne : créer des chapitres virtuels basés sur les contenus téléchargés
+        return await _loadOfflineChapters();
+      }
+
+      // Mode en ligne : utiliser le SyncService normal
       final chaptersData = await _syncService.getChapters(_currentModule!.id);
       return _processChaptersData(chaptersData);
     } catch (e) {
+      print(
+          "❌ Erreur lors du chargement des chapitres en ligne, tentative hors ligne...");
       try {
-        final cachedChapters =
-            await _syncService.getChapters(_currentModule!.id);
-        return _processChaptersData(cachedChapters);
-      } catch (cacheError) {
+        return await _loadOfflineChapters();
+      } catch (offlineError) {
+        print("❌ Erreur hors ligne aussi: $offlineError");
         throw AppException(
-            message: 'Impossible de charger les chapitres: $cacheError');
+            message:
+                'Impossible de charger les chapitres: ${offlineError.toString()}');
       }
     } finally {
       _setLoading(false);
+    }
+  }
+
+  Future<List<Chapter>> _loadOfflineChapters() async {
+    print("🔒 Chargement des chapitres en mode hors ligne");
+
+    try {
+      // D'abord essayer de récupérer les chapitres sauvegardés
+      final cachedChapters = await _syncService.getChapters(_currentModule!.id);
+      print("✅ Chapitres trouvés dans le cache: ${cachedChapters.length}");
+      return _processChaptersData(cachedChapters);
+    } catch (e) {
+      print("📁 Pas de chapitres en cache, création de chapitres virtuels...");
+
+      // Créer des chapitres virtuels basés sur tous les contenus téléchargés
+      final downloadedItems = await _downloadStorage.getDownloadedItems();
+      final moduleContents = downloadedItems
+          .where((item) => item['moduleId'] == _currentModule!.id)
+          .toList();
+
+      print("📋 Contenus téléchargés pour ce module:");
+      for (final item in moduleContents) {
+        print(
+            "   - Type: ${item['type']}, Titre: ${item['title']}, ID: ${item['id']}");
+      }
+
+      if (moduleContents.isEmpty) {
+        print("❌ Aucun contenu téléchargé pour ce module");
+        throw AppException(
+            message: 'Aucun contenu disponible hors ligne pour ce module');
+      }
+
+      // Créer un chapitre virtuel "Contenus téléchargés"
+      final virtualChapter = Chapter(
+        id: 'virtual_${_currentModule!.id}',
+        title: 'Contenus téléchargés',
+        description: 'Assignments et ressources disponibles hors ligne',
+        moduleId: _currentModule!.id,
+        order: 1,
+        visible: true,
+        active: true,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      _visibleChapters = [virtualChapter];
+      print("✅ Chapitre virtuel créé: ${virtualChapter.title}");
+
+      // Charger les activités pour ce chapitre virtuel
+      await _loadVirtualChapterActivities(virtualChapter.id, moduleContents);
+
+      notifyListeners();
+      return [virtualChapter];
+    }
+  }
+
+  Future<void> _loadVirtualChapterActivities(String virtualChapterId,
+      List<Map<String, dynamic>> downloadedContents) async {
+    print(
+        "🎯 Chargement des activités virtuelles pour le chapitre: $virtualChapterId");
+
+    final activities = <Activity>[];
+
+    for (final contentData in downloadedContents) {
+      try {
+        // Déterminer le type d'activité basé sur le type de contenu téléchargé
+        ActivityType activityType;
+        String activityTitle;
+        String activityId;
+
+        switch (contentData['type']) {
+          case 'assignment':
+            activityType = ActivityType.ASSIGNMENT;
+            activityTitle = contentData['title'] ?? 'Assignment téléchargé';
+            activityId = contentData['assignmentId'] ?? contentData['id'] ?? '';
+            break;
+          case 'resource':
+            activityType = ActivityType.RESOURCE;
+            activityTitle = contentData['title'] ?? 'Ressource téléchargée';
+            activityId = contentData['resourceId'] ?? contentData['id'] ?? '';
+            break;
+          case 'quiz':
+            activityType = ActivityType.QUIZ;
+            activityTitle = contentData['title'] ?? 'Quiz téléchargé';
+            activityId = contentData['quizId'] ?? contentData['id'] ?? '';
+            break;
+          default:
+            print("⚠️ Type de contenu non géré: ${contentData['type']}");
+            continue;
+        }
+
+        // Créer une activité virtuelle pour ce contenu
+        final activity = Activity(
+          id: activityId,
+          title: activityTitle,
+          type: activityType,
+          moduleId: _currentModule!.id,
+          chapterId: virtualChapterId,
+          order: activities.length + 1,
+          visible: true,
+          active: true,
+          scope: ActivityScope.CHAPTER,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+
+        activities.add(activity);
+        print(
+            "✅ Activité virtuelle créée: ${activity.title} (${activityType})");
+      } catch (e) {
+        print("❌ Erreur lors de la création de l'activité virtuelle: $e");
+        print("   Données: $contentData");
+      }
+    }
+
+    _chapterActivities[virtualChapterId] = activities;
+    print("📊 Total activités virtuelles créées: ${activities.length}");
+    notifyListeners();
+  }
+
+  // Vérifier la connectivité Internet
+  Future<bool> _isOnline() async {
+    final List<ConnectivityResult> connectivityResult =
+        await Connectivity().checkConnectivity();
+
+    if (connectivityResult.contains(ConnectivityResult.none)) {
+      return false;
+    }
+
+    try {
+      final result = await InternetAddress.lookup('google.com');
+      return result.isNotEmpty && result[0].rawAddress.isNotEmpty;
+    } on SocketException catch (_) {
+      return false;
     }
   }
 
@@ -170,18 +325,56 @@ class ModulesProvider with ChangeNotifier {
   }
 
   Future<void> _loadActivitiesForChapter(Chapter chapter) async {
-    try {
-      final activitiesData =
-          await _syncService.getChapterActivities(chapter.id);
-      final activities = activitiesData
-          .map((data) => Activity.fromJson(data))
-          .where((activity) => activity.visible)
-          .toList()
-        ..sort((a, b) => a.order.compareTo(b.order));
+    // Ne pas traiter les chapitres virtuels - leurs activités sont déjà chargées
+    if (chapter.id.startsWith('virtual_')) {
+      print(
+          "🎯 Chapitre virtuel détecté, activités déjà chargées: ${chapter.id}");
+      return;
+    }
 
-      _chapterActivities[chapter.id] = activities;
+    print(
+        "📖 Chargement des activités pour le chapitre: ${chapter.title} (${chapter.id})");
+
+    try {
+      // Vérifier la connectivité pour ce chapitre
+      final isOnline = await _isOnline();
+
+      if (!isOnline) {
+        // Mode hors ligne : essayer de récupérer les activités du cache uniquement
+        print(
+            "🔒 Mode hors ligne - recherche activités en cache pour: ${chapter.id}");
+        try {
+          final cachedActivities =
+              await _syncService.getChapterActivities(chapter.id);
+          final activities = cachedActivities
+              .map((data) => Activity.fromJson(data))
+              .where((activity) => activity.visible)
+              .toList()
+            ..sort((a, b) => a.order.compareTo(b.order));
+
+          _chapterActivities[chapter.id] = activities;
+          print("✅ Activités en cache trouvées: ${activities.length}");
+        } catch (e) {
+          print("❌ Pas d'activités en cache pour ce chapitre: $e");
+          _chapterActivities[chapter.id] = [];
+        }
+      } else {
+        // Mode en ligne : appel API normal
+        final activitiesData =
+            await _syncService.getChapterActivities(chapter.id);
+        final activities = activitiesData
+            .map((data) => Activity.fromJson(data))
+            .where((activity) => activity.visible)
+            .toList()
+          ..sort((a, b) => a.order.compareTo(b.order));
+
+        _chapterActivities[chapter.id] = activities;
+        print("✅ Activités en ligne chargées: ${activities.length}");
+      }
+
       notifyListeners();
     } catch (e) {
+      print("❌ Erreur lors du chargement des activités du chapitre: $e");
       _chapterActivities[chapter.id] = [];
       notifyListeners();
     }
@@ -190,20 +383,49 @@ class ModulesProvider with ChangeNotifier {
   Future<void> _loadModuleActivities() async {
     if (_currentModule == null) return;
 
+    print("📚 Chargement des activités du module: ${_currentModule!.id}");
     _setLoading(true);
 
     try {
-      final activitiesData =
-          await _syncService.getModuleActivities(_currentModule!.id);
-      final activities = activitiesData
-          .map((data) => Activity.fromJson(data))
-          .where((activity) => activity.visible)
-          .toList()
-        ..sort((a, b) => a.order.compareTo(b.order));
+      // Vérifier la connectivité
+      final isOnline = await _isOnline();
 
-      _moduleActivities = activities;
+      if (!isOnline) {
+        // Mode hors ligne : essayer de récupérer les activités du cache uniquement
+        print("🔒 Mode hors ligne - recherche activités de module en cache");
+        try {
+          final cachedActivities =
+              await _syncService.getModuleActivities(_currentModule!.id);
+          final activities = cachedActivities
+              .map((data) => Activity.fromJson(data))
+              .where((activity) => activity.visible)
+              .toList()
+            ..sort((a, b) => a.order.compareTo(b.order));
+
+          _moduleActivities = activities;
+          print(
+              "✅ Activités de module en cache trouvées: ${activities.length}");
+        } catch (e) {
+          print("❌ Pas d'activités de module en cache: $e");
+          _moduleActivities = [];
+        }
+      } else {
+        // Mode en ligne : appel API normal
+        final activitiesData =
+            await _syncService.getModuleActivities(_currentModule!.id);
+        final activities = activitiesData
+            .map((data) => Activity.fromJson(data))
+            .where((activity) => activity.visible)
+            .toList()
+          ..sort((a, b) => a.order.compareTo(b.order));
+
+        _moduleActivities = activities;
+        print("✅ Activités de module en ligne chargées: ${activities.length}");
+      }
+
       notifyListeners();
     } catch (e) {
+      print("❌ Erreur lors du chargement des activités du module: $e");
       _moduleActivities = [];
       notifyListeners();
     } finally {
