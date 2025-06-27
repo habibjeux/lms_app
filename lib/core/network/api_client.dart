@@ -43,6 +43,7 @@ class ApiClient {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'x-mobile-app': 'true',
         },
       ),
     );
@@ -76,6 +77,7 @@ class ApiClient {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'x-mobile-app': 'true',
         },
       ),
     );
@@ -100,6 +102,7 @@ class ApiClient {
         headers: {
           'Content-Type': 'multipart/form-data',
           'Accept': 'application/json',
+          'x-mobile-app': 'true',
         },
       ),
     );
@@ -124,6 +127,7 @@ class ApiClient {
         headers: {
           'Content-Type': 'multipart/form-data',
           'Accept': 'application/json',
+          'x-mobile-app': 'true',
         },
       ),
     );
