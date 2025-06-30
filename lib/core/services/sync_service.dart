@@ -237,6 +237,34 @@ class SyncService {
     }
   }
 
+  Future<String?> getChapterContent(String chapterId) async {
+    try {
+      return await _storage.getChapterContent(chapterId);
+    } catch (e) {
+      print('Erreur lors de la récupération du contenu du chapitre: $e');
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getOfflineQuiz(String quizId) async {
+    try {
+      return await _storage.getQuiz(quizId);
+    } catch (e) {
+      print('Erreur lors de la récupération du quiz hors ligne: $e');
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getOfflineAssignment(
+      String assignmentId) async {
+    try {
+      return await _storage.getAssignment(assignmentId);
+    } catch (e) {
+      print('Erreur lors de la récupération du devoir hors ligne: $e');
+      return null;
+    }
+  }
+
   Future<void> smartSync({
     void Function(double)? onProgress,
     void Function(String)? onError,

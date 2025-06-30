@@ -243,6 +243,68 @@ class ActivityDetailScreen extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
+
+              // Indicateur de disponibilité hors ligne
+              if (isOffline) ...[
+                const SizedBox(height: 12),
+                FutureBuilder<String?>(
+                  future: _syncService.getLocalResourcePath(resource),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      );
+                    }
+
+                    final isAvailableOffline = snapshot.data != null;
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isAvailableOffline
+                            ? Colors.green.withOpacity(0.1)
+                            : Colors.orange.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color:
+                              isAvailableOffline ? Colors.green : Colors.orange,
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isAvailableOffline
+                                ? Icons.offline_pin
+                                : Icons.cloud_off,
+                            size: 16,
+                            color: isAvailableOffline
+                                ? Colors.green
+                                : Colors.orange,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            isAvailableOffline
+                                ? 'Disponible hors ligne'
+                                : 'Non téléchargée',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: isAvailableOffline
+                                  ? Colors.green
+                                  : Colors.orange,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
+
               const SizedBox(height: 16),
               if (resource.fileSize != null || resource.mimeType != null) ...[
                 Container(
@@ -382,30 +444,55 @@ class ActivityDetailScreen extends StatelessWidget {
     final isOnline = context.read<ConnectivityProvider>().isOnline;
 
     try {
+      // D'abord, toujours vérifier si la ressource est disponible localement
       final localPath = await _syncService.getLocalResourcePath(resource);
       if (localPath != null) {
+        print("✅ Ouverture de la ressource locale: $localPath");
         await FileHelper.openResource(localPath, null, resource.mimeType ?? '');
+
+        // Afficher un message de confirmation pour le mode hors ligne
+        if (!isOnline && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Ressource ouverte depuis le stockage local'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
         return;
       }
 
+      // Si pas disponible localement et en ligne, essayer le serveur
       if (isOnline) {
         final serverUrl = dotenv.env['SERVER_URL'] ?? '';
         final resourceUrl = '$serverUrl/${resource.url}';
+        print("🌐 Ouverture de la ressource en ligne: $resourceUrl");
         await FileHelper.openResource(
             null, resourceUrl, resource.mimeType ?? '');
         return;
       }
 
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ressource non disponible hors ligne')),
-        );
-      }
-    } catch (e) {
+      // Si hors ligne et pas de fichier local
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('Erreur lors de l\'ouverture de la ressource')),
+            content: Text(
+                'Ressource non disponible hors ligne. Téléchargez-la d\'abord pour y accéder sans connexion.'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      print("❌ Erreur lors de l'ouverture de la ressource: $e");
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Erreur lors de l\'ouverture de la ressource: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -421,10 +508,170 @@ class ActivityDetailScreen extends StatelessWidget {
   }
 
   Widget _buildQuizContent(BuildContext context) {
+    final isOffline = !context.watch<ConnectivityProvider>().isOnline;
+
+    if (isOffline) {
+      // En mode hors ligne, vérifier si le quiz est disponible localement
+      return FutureBuilder<Map<String, dynamic>?>(
+        future: _syncService.getOfflineQuiz(activity.id),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(32),
+              child: const Center(child: CircularProgressIndicator()),
+            );
+          }
+
+          if (snapshot.data != null) {
+            // Quiz disponible hors ligne
+            return Container(
+              margin: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                color: Colors.orange.withOpacity(0.1),
+                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    Icon(Icons.quiz, size: 48, color: Colors.orange),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Quiz disponible hors ligne',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Ce quiz a été téléchargé et est disponible pour consultation.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        // Navigation vers l'écran de quiz
+                        Navigator.pushNamed(
+                          context,
+                          '/quiz-detail',
+                          arguments: {
+                            'quizId': activity.id,
+                            'offlineData': snapshot.data,
+                          },
+                        );
+                      },
+                      icon: const Icon(Icons.offline_pin),
+                      label: const Text('Voir le quiz'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          } else {
+            // Quiz non disponible hors ligne
+            return _buildEmptyContent(
+              'Quiz non disponible hors ligne.\nTéléchargez-le d\'abord pour y accéder sans connexion.',
+              Icons.cloud_off,
+            );
+          }
+        },
+      );
+    }
+
+    // Mode en ligne - fonctionnalité à implémenter
     return _buildEmptyContent('Contenu du quiz à implémenter', Icons.quiz);
   }
 
   Widget _buildAssignmentContent(BuildContext context) {
+    final isOffline = !context.watch<ConnectivityProvider>().isOnline;
+
+    if (isOffline) {
+      // En mode hors ligne, vérifier si le devoir est disponible localement
+      return FutureBuilder<Map<String, dynamic>?>(
+        future: _syncService.getOfflineAssignment(activity.id),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(32),
+              child: const Center(child: CircularProgressIndicator()),
+            );
+          }
+
+          if (snapshot.data != null) {
+            // Devoir disponible hors ligne
+            return Container(
+              margin: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                color: Colors.teal.withOpacity(0.1),
+                border: Border.all(color: Colors.teal.withOpacity(0.3)),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    Icon(Icons.assignment, size: 48, color: Colors.teal),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Devoir disponible hors ligne',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.teal,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Ce devoir a été téléchargé et est disponible pour consultation.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        // Navigation vers l'écran de devoir
+                        Navigator.pushNamed(
+                          context,
+                          '/assignment-detail',
+                          arguments: {
+                            'assignmentId': activity.id,
+                            'offlineData': snapshot.data,
+                          },
+                        );
+                      },
+                      icon: const Icon(Icons.offline_pin),
+                      label: const Text('Voir le devoir'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          } else {
+            // Devoir non disponible hors ligne
+            return _buildEmptyContent(
+              'Devoir non disponible hors ligne.\nTéléchargez-le d\'abord pour y accéder sans connexion.',
+              Icons.cloud_off,
+            );
+          }
+        },
+      );
+    }
+
+    // Mode en ligne - utiliser le widget existant
     if (activity is Assignment) {
       return Container(
         margin: const EdgeInsets.all(16),

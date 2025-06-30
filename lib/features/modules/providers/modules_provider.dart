@@ -4,6 +4,7 @@ import 'dart:io';
 import '../../../../core/exceptions/app_exception.dart';
 import '../../../../core/services/sync_service.dart';
 import '../../../../core/services/download_storage_service.dart';
+import '../../../../core/services/offline_storage_service.dart';
 import '../data/modules_repository.dart';
 import '../models/module.dart';
 import '../models/chapter.dart';
@@ -15,6 +16,7 @@ class ModulesProvider with ChangeNotifier {
   final ModulesRepository _repository = ModulesRepository();
   final SyncService _syncService = SyncService();
   final DownloadStorageService _downloadStorage = DownloadStorageService();
+  final OfflineStorageService _offlineStorage = OfflineStorageService();
 
   List<Module> _modules = [];
   bool _isLoading = false;
@@ -184,7 +186,45 @@ class ModulesProvider with ChangeNotifier {
       // D'abord essayer de récupérer les chapitres sauvegardés
       final cachedChapters = await _syncService.getChapters(_currentModule!.id);
       print("✅ Chapitres trouvés dans le cache: ${cachedChapters.length}");
-      return _processChaptersData(cachedChapters);
+
+      // Récupérer le contenu sauvegardé pour chaque chapitre
+      final chaptersWithContent = <Chapter>[];
+      for (final chapterData in cachedChapters) {
+        final chapter = Chapter.fromJson(chapterData);
+
+        // Récupérer le contenu sauvegardé du chapitre
+        try {
+          final savedContent = await _syncService.getChapterContent(chapter.id);
+          if (savedContent != null && savedContent.isNotEmpty) {
+            // Créer un nouveau chapitre avec le contenu récupéré
+            final chapterWithContent = Chapter(
+              id: chapter.id,
+              title: chapter.title,
+              description: chapter.description,
+              content:
+                  savedContent, // ← Contenu récupéré depuis le stockage local
+              moduleId: chapter.moduleId,
+              order: chapter.order,
+              visible: chapter.visible,
+              active: chapter.active,
+              createdAt: chapter.createdAt,
+              updatedAt: chapter.updatedAt,
+            );
+            chaptersWithContent.add(chapterWithContent);
+            print("✅ Contenu récupéré pour le chapitre: ${chapter.title}");
+          } else {
+            // Garder le chapitre même sans contenu
+            chaptersWithContent.add(chapter);
+            print("⚠️ Pas de contenu sauvegardé pour: ${chapter.title}");
+          }
+        } catch (e) {
+          print("❌ Erreur récupération contenu pour ${chapter.title}: $e");
+          chaptersWithContent.add(chapter);
+        }
+      }
+
+      return _processChaptersData(
+          chaptersWithContent.map((c) => c.toJson()).toList());
     } catch (e) {
       print("📁 Pas de chapitres en cache, création de chapitres virtuels...");
 
@@ -211,6 +251,8 @@ class ModulesProvider with ChangeNotifier {
         id: 'virtual_${_currentModule!.id}',
         title: 'Contenus téléchargés',
         description: 'Assignments et ressources disponibles hors ligne',
+        content:
+            '<p><strong>Contenus téléchargés</strong></p><p>Vous pouvez accéder aux activités et ressources téléchargées ci-dessous. Ces contenus sont disponibles même sans connexion Internet.</p>',
         moduleId: _currentModule!.id,
         order: 1,
         visible: true,
