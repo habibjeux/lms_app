@@ -5,8 +5,9 @@ import '../../models/message.dart';
 import '../../providers/messaging_provider.dart';
 import 'attachment_viewer.dart';
 import '../../../auth/models/user.dart';
+import 'dart:math' as math;
 
-class MessageBubble extends StatelessWidget {
+class MessageBubble extends StatefulWidget {
   final Message message;
   final bool isMe;
   final bool isPending;
@@ -21,102 +22,262 @@ class MessageBubble extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-      child: Row(
-        mainAxisAlignment:
-            isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (!isMe) _buildAvatar(),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Column(
-              crossAxisAlignment:
-                  isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-              children: [
-                GestureDetector(
-                  onLongPress: isMe && !isPending && !isError
-                      ? () => _showDeleteDialog(context)
-                      : null,
-                  child: _buildMessageContent(context),
-                ),
-                if (isPending || isError) _buildStatusIndicator(),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          if (isMe) _buildAvatar(),
-        ],
-      ),
+  State<MessageBubble> createState() => _MessageBubbleState();
+}
+
+class _MessageBubbleState extends State<MessageBubble>
+    with TickerProviderStateMixin {
+  late AnimationController _scaleController;
+  late AnimationController _slideController;
+  late Animation<double> _scaleAnimation;
+  late Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _scaleController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
     );
+    _slideController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+
+    _scaleAnimation = Tween<double>(
+      begin: 0.8,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _scaleController,
+      curve: Curves.elasticOut,
+    ));
+
+    _slideAnimation = Tween<Offset>(
+      begin: widget.isMe ? const Offset(0.3, 0) : const Offset(-0.3, 0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _slideController,
+      curve: Curves.easeOutBack,
+    ));
+
+    // Déclencher les animations avec un délai
+    Future.delayed(const Duration(milliseconds: 50), () {
+      if (mounted) {
+        _slideController.forward();
+        _scaleController.forward();
+      }
+    });
   }
 
-  Widget _buildAvatar() {
-    final user = isMe ? message.sender : message.receiver;
-    final initials = _getInitials(user);
+  @override
+  void dispose() {
+    _scaleController.dispose();
+    _slideController.dispose();
+    super.dispose();
+  }
 
-    return CircleAvatar(
-      radius: 16,
-      backgroundColor: isMe ? Colors.blue : Colors.grey,
-      child: Text(
-        initials,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
+  @override
+  Widget build(BuildContext context) {
+    return SlideTransition(
+      position: _slideAnimation,
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
+          child: Row(
+            mainAxisAlignment:
+                widget.isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (!widget.isMe) ...[
+                _buildModernAvatar(),
+                const SizedBox(width: 12),
+              ],
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: widget.isMe
+                      ? CrossAxisAlignment.end
+                      : CrossAxisAlignment.start,
+                  children: [
+                    GestureDetector(
+                      onLongPress:
+                          widget.isMe && !widget.isPending && !widget.isError
+                              ? () => _showDeleteDialog(context)
+                              : null,
+                      child: _buildModernMessageContent(context),
+                    ),
+                    if (widget.isPending || widget.isError)
+                      _buildModernStatusIndicator(),
+                    _buildTimestamp(),
+                  ],
+                ),
+              ),
+              if (widget.isMe) ...[
+                const SizedBox(width: 12),
+                _buildModernAvatar(),
+              ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildMessageContent(BuildContext context) {
+  Widget _buildModernAvatar() {
+    final user = widget.message.sender;
+    final initials = _getInitials(user);
+    final color = _getUserColor(user);
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      width: 36,
+      height: 36,
       decoration: BoxDecoration(
-        color: isMe ? Theme.of(context).primaryColor : Colors.grey[200],
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (message.attachments.isNotEmpty) _buildAttachments(context),
-          if (message.content.isNotEmpty) ...[
-            if (message.attachments.isNotEmpty) const SizedBox(height: 8),
-            Text(
-              message.content,
-              style: TextStyle(
-                color: isMe ? Colors.white : Colors.black,
-                fontSize: 16,
-              ),
-            ),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            color,
+            color.withOpacity(0.7),
           ],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
         ],
+      ),
+      child: Center(
+        child: Text(
+          initials,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildStatusIndicator() {
+  Widget _buildModernMessageContent(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.of(context).size.width * 0.75,
+      ),
+      decoration: BoxDecoration(
+        gradient: widget.isMe
+            ? LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  theme.primaryColor,
+                  theme.primaryColor.withOpacity(0.8),
+                ],
+              )
+            : null,
+        color: widget.isMe ? null : Colors.grey[100],
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(20),
+          topRight: const Radius.circular(20),
+          bottomLeft: widget.isMe
+              ? const Radius.circular(20)
+              : const Radius.circular(4),
+          bottomRight: widget.isMe
+              ? const Radius.circular(4)
+              : const Radius.circular(20),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: widget.isMe
+                ? theme.primaryColor.withOpacity(0.3)
+                : Colors.black.withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (widget.message.attachments.isNotEmpty)
+              _buildModernAttachments(context),
+            if (widget.message.content.isNotEmpty) ...[
+              if (widget.message.attachments.isNotEmpty)
+                const SizedBox(height: 8),
+              Text(
+                widget.message.content,
+                style: TextStyle(
+                  color: widget.isMe ? Colors.white : Colors.grey[800],
+                  fontSize: 15,
+                  fontWeight: FontWeight.w400,
+                  letterSpacing: 0.2,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimestamp() {
     return Padding(
       padding: const EdgeInsets.only(top: 4),
+      child: Text(
+        _formatTime(widget.message.createdAt),
+        style: TextStyle(
+          fontSize: 11,
+          color: Colors.grey[500],
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModernStatusIndicator() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (isPending)
-            const SizedBox(
+          if (widget.isPending)
+            Container(
               width: 12,
               height: 12,
-              child: CircularProgressIndicator(strokeWidth: 2),
+              margin: const EdgeInsets.only(right: 6),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  Theme.of(context).primaryColor.withOpacity(0.7),
+                ),
+              ),
             )
-          else if (isError)
-            const Icon(Icons.error_outline, color: Colors.red, size: 16),
-          const SizedBox(width: 4),
+          else if (widget.isError)
+            Container(
+              margin: const EdgeInsets.only(right: 6),
+              child: Icon(
+                Icons.error_outline_rounded,
+                color: Colors.red[400],
+                size: 14,
+              ),
+            ),
           Text(
-            isPending ? 'Envoi...' : 'Erreur',
+            widget.isPending ? 'Envoi en cours...' : 'Échec de l\'envoi',
             style: TextStyle(
-              color: isError ? Colors.red : Colors.grey,
-              fontSize: 12,
+              color: widget.isError ? Colors.red[400] : Colors.grey[500],
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              fontStyle: FontStyle.italic,
             ),
           ),
         ],
@@ -124,22 +285,22 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildAttachments(BuildContext context) {
+  Widget _buildModernAttachments(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: message.attachments.map((attachment) {
+      children: widget.message.attachments.map((attachment) {
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: _buildAttachmentPreview(attachment, context),
+          child: _buildModernAttachmentPreview(attachment, context),
         );
       }).toList(),
     );
   }
 
-  Widget _buildAttachmentPreview(
+  Widget _buildModernAttachmentPreview(
       MessageAttachment attachment, BuildContext context) {
     if (attachment.isImage) {
-      return _buildImage(attachment);
+      return _buildModernImage(attachment);
     }
 
     return GestureDetector(
@@ -152,33 +313,57 @@ class MessageBubble extends StatelessWidget {
         );
       },
       child: Container(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.grey[300],
-          borderRadius: BorderRadius.circular(8),
+          color:
+              widget.isMe ? Colors.white.withOpacity(0.15) : Colors.grey[200],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color:
+                widget.isMe ? Colors.white.withOpacity(0.2) : Colors.grey[300]!,
+            width: 1,
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              attachment.isPdf ? Icons.picture_as_pdf : Icons.attach_file,
-              color: attachment.isPdf ? Colors.red : Colors.grey[700],
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: attachment.isPdf ? Colors.red[50] : Colors.blue[50],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                attachment.isPdf
+                    ? Icons.picture_as_pdf_rounded
+                    : Icons.attach_file_rounded,
+                color: attachment.isPdf ? Colors.red[600] : Colors.blue[600],
+                size: 20,
+              ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 12),
             Flexible(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     attachment.filename,
-                    style: const TextStyle(fontSize: 14),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: widget.isMe ? Colors.white : Colors.grey[800],
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
+                  const SizedBox(height: 2),
                   Text(
                     _formatFileSize(attachment.fileSize),
                     style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
+                      fontSize: 11,
+                      color: widget.isMe
+                          ? Colors.white.withOpacity(0.8)
+                          : Colors.grey[600],
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
@@ -190,12 +375,12 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildImage(MessageAttachment attachment) {
+  Widget _buildModernImage(MessageAttachment attachment) {
     return FutureBuilder<bool>(
       future: _checkFileExists(attachment.localPath),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return _buildLoadingContainer();
+          return _buildModernLoadingContainer();
         }
 
         final bool fileExists = snapshot.data ?? false;
@@ -211,26 +396,35 @@ class MessageBubble extends StatelessWidget {
               _openAttachment(attachment);
             }
           },
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Image.network(
-              imageUrl,
-              fit: BoxFit.cover,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return _buildLoadingContainer();
-              },
-              errorBuilder: (context, error, stackTrace) {
-                debugPrint('Erreur de chargement de l\'image: $error');
-                return Container(
-                  width: 200,
-                  height: 200,
-                  color: Colors.grey[300],
-                  child: const Center(
-                    child: Icon(Icons.error_outline, color: Colors.red),
-                  ),
-                );
-              },
+          child: Container(
+            constraints: const BoxConstraints(
+              maxWidth: 250,
+              maxHeight: 300,
+            ),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Image.network(
+                imageUrl,
+                fit: BoxFit.cover,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return _buildModernLoadingContainer();
+                },
+                errorBuilder: (context, error, stackTrace) {
+                  debugPrint('Erreur de chargement de l\'image: $error');
+                  return _buildModernErrorContainer();
+                },
+              ),
             ),
           ),
         );
@@ -238,21 +432,26 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildErrorContainer() {
+  Widget _buildModernErrorContainer() {
     return Container(
       width: 200,
       height: 150,
-      color: Colors.grey[300],
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey[300]!, width: 1),
+      ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.broken_image, size: 32, color: Colors.grey),
+          Icon(Icons.broken_image_rounded, size: 40, color: Colors.grey[400]),
           const SizedBox(height: 8),
           Text(
             'Image non disponible',
             style: TextStyle(
               color: Colors.grey[600],
               fontSize: 12,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -260,15 +459,53 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildLoadingContainer() {
+  Widget _buildModernLoadingContainer() {
     return Container(
       width: 200,
       height: 150,
-      color: Colors.grey[300],
-      child: const Center(
-        child: CircularProgressIndicator(),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(
+            Theme.of(context).primaryColor,
+          ),
+        ),
       ),
     );
+  }
+
+  Color _getUserColor(User? user) {
+    if (user == null) return Colors.grey;
+
+    // Génère une couleur basée sur l'ID de l'utilisateur pour la cohérence
+    final colors = [
+      Colors.blue[600]!,
+      Colors.green[600]!,
+      Colors.orange[600]!,
+      Colors.purple[600]!,
+      Colors.red[600]!,
+      Colors.teal[600]!,
+      Colors.indigo[600]!,
+      Colors.pink[600]!,
+    ];
+
+    final hash = user.id.hashCode;
+    return colors[hash.abs() % colors.length];
+  }
+
+  String _formatTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final messageDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
+
+    if (messageDate == today) {
+      return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    } else {
+      return '${dateTime.day}/${dateTime.month} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    }
   }
 
   Future<bool> _checkFileExists(String? filePath) async {
@@ -335,7 +572,8 @@ class MessageBubble extends StatelessWidget {
 
     if (confirmed == true) {
       final provider = Provider.of<MessagingProvider>(context, listen: false);
-      await provider.deleteMessage(message.discussionId, message.id);
+      await provider.deleteMessage(
+          widget.message.discussionId, widget.message.id);
     }
   }
 }

@@ -38,12 +38,12 @@ class DashboardScreen extends StatelessWidget {
               NavigationDestination(
                 icon: Icon(Icons.forum_outlined),
                 selectedIcon: Icon(Icons.forum),
-                label: 'Forums',
+                label: 'Messages',
               ),
               NavigationDestination(
                 icon: Icon(Icons.video_call_outlined),
                 selectedIcon: Icon(Icons.video_call),
-                label: 'Réunions',
+                label: 'Sessions',
               ),
               NavigationDestination(
                 icon: Icon(Icons.settings_outlined),
