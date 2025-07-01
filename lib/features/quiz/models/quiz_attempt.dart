@@ -94,7 +94,11 @@ class QuizAttempt extends BaseModel {
   bool get isInProgress => status == 'in_progress';
 
   String get scoreText {
-    return score.toStringAsFixed(1);
+    if (score == score.roundToDouble()) {
+      return score.round().toString();
+    } else {
+      return score.toStringAsFixed(1);
+    }
   }
 
   String get timeSpentText {

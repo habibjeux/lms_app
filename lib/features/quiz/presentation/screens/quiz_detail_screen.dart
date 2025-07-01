@@ -252,7 +252,7 @@ class _QuizDetailScreenState extends State<QuizDetailScreen> {
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        '${quiz.maxScore.toStringAsFixed(1)} points',
+                        '${_formatScore(quiz.maxScore)} points',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 14,
@@ -376,7 +376,7 @@ class _QuizDetailScreenState extends State<QuizDetailScreen> {
             _buildInfoRow(
               icon: Icons.grade,
               label: 'Score maximum',
-              value: '${quiz.maxScore.toStringAsFixed(1)} points',
+              value: '${_formatScore(quiz.maxScore)} points',
             ),
             _buildInfoRow(
               icon: Icons.repeat,
@@ -470,97 +470,112 @@ class _QuizDetailScreenState extends State<QuizDetailScreen> {
     final Color statusColor =
         attempt.isCompleted ? Colors.green : Colors.orange;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            statusColor.withOpacity(0.1),
-            statusColor.withOpacity(0.05),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: statusColor.withOpacity(0.2),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: statusColor.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              attempt.isCompleted ? Icons.check_circle : Icons.pending,
-              color: statusColor,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Tentative du ${_formatDate(attempt.startDate)}',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: statusColor,
-                    fontSize: 15,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Score: ${attempt.scoreText}',
-                  style: TextStyle(
-                    color: statusColor.withOpacity(0.8),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                if (attempt.endDate != null)
-                  Text(
-                    'Durée: ${attempt.timeSpentText}',
-                    style: TextStyle(
-                      color: statusColor.withOpacity(0.8),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
+    return Consumer<QuizProvider>(
+      builder: (context, quizProvider, child) {
+        final maxScore = quizProvider.currentQuiz?.maxScore ?? 0;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                statusColor.withOpacity(0.1),
+                statusColor.withOpacity(0.05),
               ],
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: statusColor.withOpacity(0.2),
+              width: 1,
             ),
-            child: Text(
-              attempt.isCompleted ? 'Terminé' : 'En cours',
-              style: TextStyle(
-                color: statusColor,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
+            boxShadow: [
+              BoxShadow(
+                color: statusColor.withOpacity(0.1),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
               ),
-            ),
+            ],
           ),
-        ],
-      ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  attempt.isCompleted ? Icons.check_circle : Icons.pending,
+                  color: statusColor,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Tentative du ${_formatDate(attempt.startDate)}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: statusColor,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Score: ${_formatScore(attempt.score)}/${_formatScore(maxScore)}',
+                      style: TextStyle(
+                        color: statusColor.withOpacity(0.8),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (attempt.endDate != null)
+                      Text(
+                        'Durée: ${attempt.timeSpentText}',
+                        style: TextStyle(
+                          color: statusColor.withOpacity(0.8),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  attempt.isCompleted ? 'Terminé' : 'En cours',
+                  style: TextStyle(
+                    color: statusColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
+  }
+
+  // Formater les scores pour afficher les entiers sans décimales
+  String _formatScore(double score) {
+    if (score == score.roundToDouble()) {
+      return score.round().toString();
+    } else {
+      return score.toStringAsFixed(1);
+    }
   }
 
   Widget _buildActionButtons(
@@ -569,6 +584,10 @@ class _QuizDetailScreenState extends State<QuizDetailScreen> {
     QuizProvider quizProvider,
     ConnectivityProvider connectivityProvider,
   ) {
+    // Vérifier si l'utilisateur a atteint le nombre maximum de tentatives
+    final hasReachedMaxAttempts =
+        quizProvider.attempts.length >= quiz.maxAttempts;
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       elevation: 2,
@@ -577,59 +596,8 @@ class _QuizDetailScreenState extends State<QuizDetailScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // Bouton principal
-            Container(
-              width: double.infinity,
-              height: 48,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: quiz.isAvailable && connectivityProvider.isOnline
-                      ? [Colors.orange, Colors.orange.withOpacity(0.8)]
-                      : [Colors.grey[400]!, Colors.grey[300]!],
-                ),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: quiz.isAvailable && connectivityProvider.isOnline
-                    ? [
-                        BoxShadow(
-                          color: Colors.orange.withOpacity(0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ]
-                    : null,
-              ),
-              child: ElevatedButton.icon(
-                onPressed: quiz.isAvailable && connectivityProvider.isOnline
-                    ? () => _startQuiz(context, quizProvider)
-                    : null,
-                icon: const Icon(Icons.play_arrow),
-                label: Text(
-                  quiz.isAvailable
-                      ? 'Commencer le quiz'
-                      : quiz.isExpired
-                          ? 'Quiz expiré'
-                          : 'Quiz non disponible',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 16,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  foregroundColor: Colors.white,
-                  shadowColor: Colors.transparent,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ),
-
-            // Message hors ligne
-            if (!connectivityProvider.isOnline) ...[
-              const SizedBox(height: 16),
+            // Message d'erreur pour tentatives dépassées
+            if (hasReachedMaxAttempts) ...[
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
@@ -638,13 +606,13 @@ class _QuizDetailScreenState extends State<QuizDetailScreen> {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      Colors.orange.withOpacity(0.1),
-                      Colors.orange.withOpacity(0.05),
+                      Colors.red.withOpacity(0.1),
+                      Colors.red.withOpacity(0.05),
                     ],
                   ),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: Colors.orange.withOpacity(0.3),
+                    color: Colors.red.withOpacity(0.3),
                     width: 1,
                   ),
                 ),
@@ -653,21 +621,21 @@ class _QuizDetailScreenState extends State<QuizDetailScreen> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.1),
+                        color: Colors.red.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
-                        Icons.wifi_off,
-                        color: Colors.orange,
+                        Icons.block,
+                        color: Colors.red,
                         size: 20,
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'Connexion Internet requise pour passer le quiz',
+                        'Vous avez atteint le nombre maximum de tentatives autorisées (${quiz.maxAttempts}) pour ce quiz.',
                         style: TextStyle(
-                          color: Colors.orange,
+                          color: Colors.red,
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                         ),
@@ -676,6 +644,107 @@ class _QuizDetailScreenState extends State<QuizDetailScreen> {
                   ],
                 ),
               ),
+            ] else ...[
+              // Bouton principal
+              Container(
+                width: double.infinity,
+                height: 48,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: quiz.isAvailable && connectivityProvider.isOnline
+                        ? [Colors.orange, Colors.orange.withOpacity(0.8)]
+                        : [Colors.grey[400]!, Colors.grey[300]!],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: quiz.isAvailable && connectivityProvider.isOnline
+                      ? [
+                          BoxShadow(
+                            color: Colors.orange.withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: ElevatedButton.icon(
+                  onPressed: quiz.isAvailable && connectivityProvider.isOnline
+                      ? () => _startQuiz(context, quizProvider)
+                      : null,
+                  icon: const Icon(Icons.play_arrow),
+                  label: Text(
+                    quiz.isAvailable
+                        ? 'Commencer le quiz'
+                        : quiz.isExpired
+                            ? 'Quiz expiré'
+                            : 'Quiz non disponible',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    foregroundColor: Colors.white,
+                    shadowColor: Colors.transparent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+
+              // Message hors ligne
+              if (!connectivityProvider.isOnline) ...[
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.orange.withOpacity(0.1),
+                        Colors.orange.withOpacity(0.05),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.orange.withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.wifi_off,
+                          color: Colors.orange,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Connexion Internet requise pour passer le quiz',
+                          style: TextStyle(
+                            color: Colors.orange,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ],
         ),

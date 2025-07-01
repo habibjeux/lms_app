@@ -104,9 +104,11 @@ class SyncService {
 
       print('Téléchargement du chapitre: $title (ID: $chapterId)');
 
-      // Sauvegarder le contenu du chapitre
+      // Sauvegarder le contenu du chapitre avec images téléchargées
       if (content != null) {
-        await _storage.saveChapterContent(chapterId, content);
+        final processedContent =
+            await _downloadChapterImagesAndUpdateContent(content, chapterId);
+        await _storage.saveChapterContent(chapterId, processedContent);
       }
 
       final activitiesResponse =
@@ -119,52 +121,152 @@ class SyncService {
 
       await _storage.saveActivities(chapterId, activities);
 
-      for (var activityData in activities) {
-        final activity = Activity.fromJson(activityData);
+      for (final activityData in activities) {
+        try {
+          final activityType = activityData['type'] as String;
 
-        if (activity is Resource) {
-          try {
-            print('Téléchargement de la ressource: ${activity.title}');
-            await downloadResource(
-              activity,
-              isPartOfSync: true,
-            );
-            downloadedCount++;
-            onProgress?.call(downloadedCount / totalItems);
-          } catch (e) {
-            print('Erreur lors du téléchargement de la ressource: $e');
-            onError?.call(
-                'Erreur lors du téléchargement de ${activity.title}: $e');
+          switch (activityType) {
+            case 'resource':
+              final resource = Resource.fromJson(activityData);
+              await downloadResource(
+                resource,
+                isPartOfSync: true,
+              );
+              break;
+            case 'quiz':
+              await downloadQuiz(
+                activityData['id'],
+                moduleId: moduleId,
+                chapterId: chapterId,
+                title: activityData['title'],
+              );
+              break;
+            case 'assignment':
+              await downloadAssignment(
+                activityData['id'],
+                moduleId: moduleId,
+                chapterId: chapterId,
+                title: activityData['title'],
+              );
+              break;
           }
-        } else if (activity.type == ActivityType.QUIZ) {
-          try {
-            print('Téléchargement du quiz: ${activity.title}');
-            await downloadQuiz(
-              activity.id,
-              moduleId: moduleId,
-              chapterId: chapterId,
-              title: activity.title,
-            );
-            downloadedCount++;
-            onProgress?.call(downloadedCount / totalItems);
-          } catch (e) {
-            print('Erreur lors du téléchargement du quiz: $e');
-            onError?.call(
-                'Erreur lors du téléchargement du quiz ${activity.title}: $e');
-          }
+
+          downloadedCount++;
+          onProgress?.call(downloadedCount / totalItems);
+        } catch (e) {
+          print('Erreur lors du téléchargement de l\'activité: $e');
         }
       }
 
-      print('Marquage du chapitre comme téléchargé: $chapterId');
-      await _downloadStorage.markChapterAsDownloaded(
-        chapterId,
-        moduleId: moduleId,
-        title: title,
-      );
       onComplete?.call();
     } catch (e) {
       print('Erreur lors du téléchargement du chapitre: $e');
-      onError?.call('Erreur lors du téléchargement du chapitre: $e');
+      onError?.call(e.toString());
+    }
+  }
+
+  Future<String> _downloadChapterImagesAndUpdateContent(
+      String htmlContent, String chapterId) async {
+    print('🖼️ Téléchargement des images du chapitre: $chapterId');
+
+    String updatedContent = htmlContent;
+
+    // Utiliser une méthode plus simple pour parser les images
+    final imgPattern = RegExp('<img[^>]+>');
+    final srcPattern = RegExp('src="([^"]+)"');
+
+    final imgMatches = imgPattern.allMatches(htmlContent);
+    print('📸 Images trouvées dans le chapitre: ${imgMatches.length}');
+
+    for (final imgMatch in imgMatches) {
+      try {
+        final fullImgTag = imgMatch.group(0)!;
+
+        // Extraire l'URL src de cette balise img
+        final srcMatch = srcPattern.firstMatch(fullImgTag);
+        if (srcMatch == null) continue;
+
+        final imageUrl = srcMatch.group(1)!;
+        print('Téléchargement de l\'image: $imageUrl');
+
+        // Ignorer les images déjà locales ou les data URLs
+        if (imageUrl.startsWith('data:') ||
+            imageUrl.startsWith('file:') ||
+            imageUrl.startsWith('/storage/')) {
+          continue;
+        }
+
+        // Construire l'URL complète si c'est une URL relative
+        String fullImageUrl;
+        if (imageUrl.startsWith('http')) {
+          fullImageUrl = imageUrl;
+        } else {
+          final serverUrl = dotenv.env['SERVER_URL'] ?? '';
+          fullImageUrl = imageUrl.startsWith('/')
+              ? '$serverUrl$imageUrl'
+              : '$serverUrl/$imageUrl';
+        }
+
+        // Télécharger l'image
+        final localImagePath =
+            await _downloadChapterImage(fullImageUrl, chapterId);
+
+        if (localImagePath != null) {
+          // Remplacer l'URL dans le HTML par le chemin local
+          final updatedImgTag =
+              fullImgTag.replaceAll(imageUrl, 'file://$localImagePath');
+          updatedContent = updatedContent.replaceAll(fullImgTag, updatedImgTag);
+          print(
+              '✅ Image téléchargée et URL mise à jour: $imageUrl -> $localImagePath');
+        }
+      } catch (e) {
+        print('❌ Erreur lors du téléchargement de l\'image: $e');
+      }
+    }
+
+    return updatedContent;
+  }
+
+  Future<String?> _downloadChapterImage(
+      String imageUrl, String chapterId) async {
+    try {
+      final localPath = await _localPath;
+      final uri = Uri.parse(imageUrl);
+      final fileName = uri.pathSegments.last.isNotEmpty
+          ? uri.pathSegments.last
+          : 'image_${DateTime.now().millisecondsSinceEpoch}';
+
+      // Créer un dossier pour les images du chapitre
+      final chapterImagesDir =
+          Directory('$localPath/chapter_images/$chapterId');
+      if (!await chapterImagesDir.exists()) {
+        await chapterImagesDir.create(recursive: true);
+      }
+
+      final file = File('${chapterImagesDir.path}/$fileName');
+
+      // Vérifier si l'image existe déjà
+      if (await file.exists()) {
+        print('Image déjà téléchargée: $fileName');
+        return file.path;
+      }
+
+      // Télécharger l'image
+      final response = await _apiUpload.get(
+        imageUrl,
+        options: Options(
+          responseType: ResponseType.bytes,
+          followRedirects: true,
+        ),
+      );
+
+      await file.writeAsBytes(response.data);
+      print('✅ Image téléchargée: $fileName');
+
+      return file.path;
+    } catch (e) {
+      print('❌ Erreur lors du téléchargement de l\'image: $e');
+      return null;
     }
   }
 

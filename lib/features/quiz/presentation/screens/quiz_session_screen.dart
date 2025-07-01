@@ -62,6 +62,53 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
             );
           }
 
+          // Vérifier s'il y a une erreur qui empêche l'accès au quiz
+          if (quizProvider.error != null &&
+              (quizProvider.error!.contains('nombre maximum de tentatives') ||
+                  quizProvider.error!.contains('maximum attempts') ||
+                  quizProvider.error!.contains('tentatives autorisées'))) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.block,
+                    size: 64,
+                    color: Colors.red[300],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Accès refusé',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          color: Colors.red,
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Text(
+                      quizProvider.error!,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Colors.red[700],
+                          ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Retour'),
+                  ),
+                ],
+              ),
+            );
+          }
+
           final currentQuestion = quizProvider.currentQuestion;
           if (currentQuestion == null) {
             return const Center(
@@ -71,35 +118,6 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
 
           return Column(
             children: [
-              // Bannière d'information pour le mode démonstration
-              if (quizProvider.error != null &&
-                  quizProvider.error!.contains('Mode démonstration'))
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  color: Colors.orange[100],
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.info_outline,
-                        color: Colors.orange[700],
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Mode démonstration - Vous pouvez naviguer dans le quiz mais vos réponses ne seront pas sauvegardées',
-                          style: TextStyle(
-                            color: Colors.orange[700],
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
               // Barre de progression
               _buildProgressBar(quizProvider),
 
@@ -198,6 +216,47 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
                   ),
                 ),
               ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Affichage seulement du minuteur (pas de score)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (quizProvider.remainingTime != null)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: quizProvider.remainingTime!.inMinutes < 5
+                        ? Colors.red.withOpacity(0.1)
+                        : Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.timer,
+                        size: 16,
+                        color: quizProvider.remainingTime!.inMinutes < 5
+                            ? Colors.red
+                            : Colors.blue,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Temps restant: ${quizProvider.remainingTime!.inMinutes}:${(quizProvider.remainingTime!.inSeconds % 60).toString().padLeft(2, '0')}',
+                        style: TextStyle(
+                          color: quizProvider.remainingTime!.inMinutes < 5
+                              ? Colors.red
+                              : Colors.blue,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 12),
@@ -990,12 +1049,7 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
                 quizProvider.isLastQuestion ? Icons.check : Icons.arrow_forward,
               ),
               label: Text(
-                quizProvider.isLastQuestion
-                    ? (quizProvider.error != null &&
-                            quizProvider.error!.contains('Mode démonstration')
-                        ? 'Terminer la démonstration'
-                        : 'Terminer le quiz')
-                    : 'Suivant',
+                quizProvider.isLastQuestion ? 'Terminer le quiz' : 'Suivant',
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: quizProvider.isLastQuestion
@@ -1054,50 +1108,36 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
   }
 
   void _showSubmitDialog(QuizProvider quizProvider) {
-    final isDemoMode = quizProvider.error != null &&
-        quizProvider.error!.contains('Mode démonstration');
-
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title:
-            Text(isDemoMode ? 'Terminer la démonstration' : 'Terminer le quiz'),
+        title: Text('Terminer le quiz'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              isDemoMode
-                  ? 'Voulez-vous terminer cette démonstration du quiz ?'
-                  : 'Êtes-vous sûr de vouloir terminer ce quiz ?',
+              'Êtes-vous sûr de vouloir terminer ce quiz ?',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
-            if (!isDemoMode) ...[
-              Text(
-                'Questions répondues: ${quizProvider.answeredQuestions}/${quizProvider.totalQuestions}',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey[600],
-                    ),
-              ),
-              if (quizProvider.answeredQuestions < quizProvider.totalQuestions)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    'Attention: ${quizProvider.totalQuestions - quizProvider.answeredQuestions} question(s) non répondue(s)',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.orange[700],
-                          fontWeight: FontWeight.w500,
-                        ),
+            Text(
+              'Questions répondues: ${quizProvider.answeredQuestions}/${quizProvider.totalQuestions}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.grey[600],
                   ),
+            ),
+            if (quizProvider.answeredQuestions < quizProvider.totalQuestions)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Attention: ${quizProvider.totalQuestions - quizProvider.answeredQuestions} question(s) non répondue(s)',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.orange[700],
+                        fontWeight: FontWeight.w500,
+                      ),
                 ),
-            ] else
-              Text(
-                'En mode démonstration, aucune réponse n\'est sauvegardée.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.orange[700],
-                    ),
               ),
           ],
         ),
@@ -1109,24 +1149,13 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
-              if (isDemoMode) {
-                // En mode démonstration, on retourne simplement à l'écran précédent
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Démonstration terminée'),
-                    backgroundColor: Colors.orange,
-                  ),
-                );
-              } else {
-                await _submitQuiz(quizProvider);
-              }
+              await _submitQuiz(quizProvider);
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: isDemoMode ? Colors.orange : Colors.green,
+              backgroundColor: Colors.green,
               foregroundColor: Colors.white,
             ),
-            child: Text(isDemoMode ? 'Terminer' : 'Terminer'),
+            child: const Text('Terminer'),
           ),
         ],
       ),
@@ -1135,38 +1164,14 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
 
   Future<void> _submitQuiz(QuizProvider quizProvider) async {
     try {
-      // Afficher un indicateur de chargement
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const AlertDialog(
-          content: Row(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 16),
-              Text('Soumission en cours...'),
-            ],
-          ),
-        ),
-      );
-
       await quizProvider.submitQuiz();
 
       if (mounted) {
-        Navigator.pop(context); // Fermer le dialog de chargement
-        Navigator.pop(context); // Retourner à l'écran précédent
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Quiz soumis avec succès !'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        // Afficher les résultats
+        _showResultsDialog(quizProvider);
       }
     } catch (e) {
       if (mounted) {
-        Navigator.pop(context); // Fermer le dialog de chargement
-
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Erreur lors de la soumission: $e'),
@@ -1175,5 +1180,300 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
         );
       }
     }
+  }
+
+  void _showResultsDialog(QuizProvider quizProvider) {
+    final currentAttempt = quizProvider.currentAttempt;
+    if (currentAttempt == null) return;
+
+    // Calculer le nombre de questions correctes en regardant le score de chaque réponse
+    final correctQuestions =
+        quizProvider.studentAnswers.where((answer) => answer.score > 0).length;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              Icons.check_circle,
+              color: Colors.green,
+              size: 28,
+            ),
+            const SizedBox(width: 8),
+            const Text('Quiz terminé !'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.green.withOpacity(0.1),
+                    Colors.green.withOpacity(0.05),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.green.withOpacity(0.3),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Score obtenu:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      Text(
+                        '${_formatScore(currentAttempt.score)} / ${_formatScore(quizProvider.currentQuiz?.maxScore ?? 0)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Pourcentage:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      Text(
+                        '${((currentAttempt.score / (quizProvider.currentQuiz?.maxScore ?? 1)) * 100).toStringAsFixed(1)}%',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Questions correctes:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      Text(
+                        '$correctQuestions / ${quizProvider.totalQuestions}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Temps utilisé:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      Text(
+                        '${(quizProvider.timeSpentInSeconds ~/ 60)}:${(quizProvider.timeSpentInSeconds % 60).toString().padLeft(2, '0')}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Colors.blue,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Félicitations ! Votre quiz a été soumis avec succès.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+
+            // Afficher les réponses correctes si l'option est activée
+            if (quizProvider.currentQuiz?.showCorrectAnswers == true) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Résultats détaillés:',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 200),
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: quizProvider.studentAnswers
+                        .asMap()
+                        .entries
+                        .map((entry) {
+                      final index = entry.key;
+                      final answer = entry.value;
+                      final question =
+                          quizProvider.currentQuiz!.questions.firstWhere(
+                        (q) => q.id == answer.questionId,
+                      );
+                      // Utiliser le score pour déterminer si c'est correct
+                      final isCorrect = answer.score > 0;
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isCorrect
+                              ? Colors.green.withOpacity(0.1)
+                              : Colors.red.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isCorrect
+                                ? Colors.green.withOpacity(0.3)
+                                : Colors.red.withOpacity(0.3),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  isCorrect ? Icons.check_circle : Icons.cancel,
+                                  color: isCorrect ? Colors.green : Colors.red,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Question ${index + 1}',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: isCorrect
+                                          ? Colors.green[800]
+                                          : Colors.red[800],
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  '${_formatScore(answer.score)}/${_formatScore(question.points)} pts',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isCorrect
+                                        ? Colors.green[700]
+                                        : Colors.red[700],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              question.text,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                                fontStyle: FontStyle.italic,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (answer.selectedAnswerIds.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Votre réponse: ${_getAnswerText(question, answer)}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isCorrect
+                                      ? Colors.green[600]
+                                      : Colors.red[600],
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context); // Fermer le dialog
+              Navigator.pop(context); // Retourner à l'écran précédent
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Retour'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Formater les scores pour afficher les entiers sans décimales
+  String _formatScore(double score) {
+    if (score == score.roundToDouble()) {
+      return score.round().toString();
+    } else {
+      return score.toStringAsFixed(1);
+    }
+  }
+
+  // Obtenir le texte de la réponse sélectionnée
+  String _getAnswerText(Question question, dynamic studentAnswer) {
+    if (studentAnswer.textAnswer != null &&
+        studentAnswer.textAnswer.isNotEmpty) {
+      return studentAnswer.textAnswer;
+    }
+
+    if (studentAnswer.selectedAnswerIds != null &&
+        studentAnswer.selectedAnswerIds.isNotEmpty) {
+      final answerId = studentAnswer.selectedAnswerIds.first;
+      final answer = question.answers.firstWhere(
+        (a) => a.id == answerId,
+        orElse: () => question.answers.first,
+      );
+      return answer.text;
+    }
+
+    return 'Aucune réponse';
   }
 }

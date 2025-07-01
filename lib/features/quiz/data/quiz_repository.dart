@@ -161,16 +161,24 @@ class QuizRepository {
       print('🎯 Soumission quiz - answers count: ${answers.length}');
       print('🎯 Soumission quiz - totalScore: $totalScore');
 
+      // Log des scores individuels pour debug
+      for (final answer in answers) {
+        print(
+            '🎯 Question ${answer.questionId}: Score ${answer.score}, Correct: ${answer.isCorrect}');
+      }
+
       final response = await _api.post('/students/quiz-attempts/submit', data: {
         'id': attemptId, // Le backend attend 'id', pas 'attemptId'
-        'timeSpent': 0, // Ajouter timeSpent comme attendu par le backend
         'answers': answers.map((answer) => answer.toJson()).toList(),
         'totalScore': totalScore,
         'endDate': DateTime.now().toIso8601String(),
       });
 
       if (response.statusCode == 200 && response.data != null) {
-        return QuizAttempt.fromJson(response.data);
+        final submittedAttempt = QuizAttempt.fromJson(response.data);
+        print(
+            '🎯 Quiz soumis avec succès - Score final: ${submittedAttempt.score}');
+        return submittedAttempt;
       } else {
         throw AppException(message: 'Erreur lors de la soumission du quiz');
       }
@@ -238,10 +246,10 @@ class QuizRepository {
   // Récupérer une tentative spécifique
   Future<QuizAttempt?> getQuizAttempt(String attemptId) async {
     try {
-      final response = await _api.get('/quiz-attempts/$attemptId');
+      final response = await _api.get('/students/quiz-attempts/$attemptId');
 
       if (response.statusCode == 200 && response.data != null) {
-        return QuizAttempt.fromJson(response.data['data']);
+        return QuizAttempt.fromJson(response.data);
       }
     } catch (e) {
       print('Erreur lors de la récupération de la tentative: $e');

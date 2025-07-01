@@ -61,12 +61,22 @@ class StudentAnswer extends BaseModel {
   @override
   Map<String, dynamic> toJson() {
     final baseJson = super.toJson();
+
+    // Le backend attend 'answerId' (un seul ID) et non 'selectedAnswerIds'
+    String? answerId;
+    if (selectedAnswerIds.isNotEmpty) {
+      // Pour les questions à choix unique, prendre le premier ID
+      // Pour les questions à choix multiples, on devra envoyer plusieurs requêtes
+      answerId = selectedAnswerIds.first;
+    }
+
     return {
       ...baseJson,
       'questionId': questionId,
       'quizAttemptId': quizAttemptId,
-      'answerId': answerId,
-      'selectedAnswerIds': selectedAnswerIds,
+      'answerId': answerId, // ✅ Format attendu par le backend
+      'selectedAnswerIds':
+          selectedAnswerIds, // ✅ Garder pour compatibilité locale
       'textAnswer': textAnswer,
       'score': score,
       'isCorrect': isCorrect,

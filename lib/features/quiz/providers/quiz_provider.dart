@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../../../core/services/sync_service.dart';
 import '../data/quiz_repository.dart';
 import '../models/quiz.dart';
@@ -24,6 +25,7 @@ class QuizProvider with ChangeNotifier {
   int _currentQuestionIndex = 0;
   DateTime? _startTime;
   double _downloadProgress = 0.0;
+  Timer? _timer;
 
   // Getters
   Quiz? get currentQuiz => _currentQuiz;
@@ -61,6 +63,11 @@ class QuizProvider with ChangeNotifier {
   }
 
   bool get isTimeUp => remainingTime?.inSeconds == 0;
+
+  int get timeSpentInSeconds {
+    if (_startTime == null) return 0;
+    return DateTime.now().difference(_startTime!).inSeconds;
+  }
 
   // Charger un quiz
   Future<void> loadQuiz(String quizId) async {
@@ -137,40 +144,46 @@ class QuizProvider with ChangeNotifier {
       _startTime = DateTime.now();
       _currentQuestionIndex = 0;
       _initializeStudentAnswers();
+      _startTimer(); // Démarrer le timer
       notifyListeners();
     } catch (e) {
       print('🚀 Exception dans startQuizAttempt: $e');
       // Si l'erreur est liée au nombre maximum de tentatives,
-      // on peut quand même permettre de voir le quiz en mode lecture seule
-      if (e.toString().contains('nombre maximum de tentatives')) {
-        // Créer une tentative fictive pour permettre la navigation
-        _currentAttempt = QuizAttempt(
-          id: 'demo_${DateTime.now().millisecondsSinceEpoch}',
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-          active: true,
-          quizId: _currentQuiz!.id,
-          studentId: 'current_student',
-          startDate: DateTime.now(),
-          status: 'demo',
-          score: 0.0,
-          timeSpent: 0,
-          isSubmitted: false,
-          isSynchronized: false,
-          studentAnswers: [],
-        );
-        _startTime = DateTime.now();
-        _currentQuestionIndex = 0;
-        _initializeStudentAnswers();
+      // empêcher complètement l'accès au lieu du mode démonstration
+      if (e.toString().contains('nombre maximum de tentatives') ||
+          e.toString().contains('maximum attempts') ||
+          e.toString().contains('tentatives autorisées')) {
         _setError(
-            'Mode démonstration : Vous avez atteint le nombre maximum de tentatives');
-        notifyListeners();
+            'Vous avez atteint le nombre maximum de tentatives autorisées pour ce quiz.');
+        return;
       } else {
         _setError(e.toString());
       }
     } finally {
       _setLoading(false);
     }
+  }
+
+  // Démarrer le timer
+  void _startTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (isTimeUp) {
+        timer.cancel();
+        // Soumettre automatiquement le quiz quand le temps est écoulé
+        _autoSubmitQuiz();
+      }
+      notifyListeners();
+    });
+  }
+
+  // Soumission automatique quand le temps est écoulé
+  Future<void> _autoSubmitQuiz() async {
+    if (_currentAttempt == null || _isSubmitting) return;
+
+    print('⏰ Temps écoulé - Soumission automatique du quiz');
+    _setError('Temps écoulé ! Le quiz a été soumis automatiquement.');
+    await submitQuiz();
   }
 
   // Initialiser les réponses d'étudiant
@@ -304,52 +317,85 @@ class QuizProvider with ChangeNotifier {
         answerId: null,
         selectedAnswerIds: selectedAnswerIds ?? [],
         textAnswer: textAnswer,
-        score: 0.0,
+        score: 0.0, // Le backend calculera le score
         isCorrect: false,
       );
       _studentAnswers.add(newStudentAnswer);
       print('✅ StudentAnswer créée à la volée: ${newStudentAnswer.id}');
+
+      // Sauvegarder au backend - le backend calculera le score automatiquement
+      if (_currentAttempt != null && !_currentAttempt!.id.startsWith('demo_')) {
+        try {
+          await _repository.saveStudentAnswer(newStudentAnswer);
+          print(
+              '✅ Réponse sauvegardée en base - le backend calculera le score');
+
+          // Recharger les réponses pour récupérer le score calculé par le backend
+          await _refreshStudentAnswersFromBackend();
+        } catch (e) {
+          print('❌ Erreur lors de la sauvegarde: $e');
+        }
+      }
+
       notifyListeners();
       return;
     }
 
-    final question = _currentQuiz!.questions.firstWhere(
-      (q) => q.id == questionId,
-    );
-
-    // Calculer le score
-    double score = 0.0;
-    bool isCorrect = false;
-
-    if (selectedAnswerIds != null && selectedAnswerIds.isNotEmpty) {
-      score = _calculateScore(question, selectedAnswerIds);
-      isCorrect = score > 0;
-    }
-
+    // Mettre à jour la réponse locale
     final updatedAnswer = _studentAnswers[answerIndex].copyWith(
       selectedAnswerIds: selectedAnswerIds ?? [],
       textAnswer: textAnswer,
-      score: score,
-      isCorrect: isCorrect,
+      score: 0.0, // Le backend calculera le score
+      isCorrect: false, // Le backend déterminera si c'est correct
     );
 
     _studentAnswers[answerIndex] = updatedAnswer;
-    print('✅ Réponse mise à jour: ${updatedAnswer.selectedAnswerIds}');
+    print(
+        '✅ Réponse mise à jour localement: ${updatedAnswer.selectedAnswerIds}');
 
-    // Sauvegarder automatiquement (sauf en mode demo)
-    if (!_currentAttempt!.id.startsWith('demo_')) {
+    // Sauvegarder au backend seulement si pas en mode demo
+    if (_currentAttempt != null && !_currentAttempt!.id.startsWith('demo_')) {
       try {
         await _repository.saveStudentAnswer(updatedAnswer);
-        print('✅ Réponse sauvegardée en base');
+        print('✅ Réponse sauvegardée en base - le backend calculera le score');
+
+        // Recharger les réponses pour récupérer le score calculé par le backend
+        await _refreshStudentAnswersFromBackend();
       } catch (e) {
         print('❌ Erreur lors de la sauvegarde automatique: $e');
         // Ne pas bloquer l'interface en cas d'erreur de sauvegarde
       }
-    } else {
-      print('🎭 Mode démo - pas de sauvegarde en base');
     }
 
     notifyListeners();
+  }
+
+  // Recharger les réponses depuis le backend pour récupérer les scores calculés
+  Future<void> _refreshStudentAnswersFromBackend() async {
+    if (_currentAttempt == null) return;
+
+    try {
+      // Récupérer la tentative mise à jour avec les réponses et scores du backend
+      final updatedAttempt =
+          await _repository.getQuizAttempt(_currentAttempt!.id);
+      if (updatedAttempt != null && updatedAttempt.studentAnswers.isNotEmpty) {
+        // Mettre à jour nos réponses locales avec les données du backend
+        for (final backendAnswer in updatedAttempt.studentAnswers) {
+          final localIndex = _studentAnswers.indexWhere(
+            (answer) => answer.questionId == backendAnswer.questionId,
+          );
+
+          if (localIndex != -1) {
+            _studentAnswers[localIndex] = backendAnswer;
+            print(
+                '🔄 Score mis à jour depuis le backend - Question ${backendAnswer.questionId}: ${backendAnswer.score}');
+          }
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      print('❌ Erreur lors du rechargement des réponses: $e');
+    }
   }
 
   // Calculer le score d'une question
@@ -435,16 +481,34 @@ class QuizProvider with ChangeNotifier {
       return;
     }
 
+    // Ne pas permettre la soumission en mode demo
+    if (_currentAttempt!.id.startsWith('demo_')) {
+      _setError('Impossible de soumettre un quiz en mode démonstration');
+      return;
+    }
+
     _setSubmitting(true);
     _clearError();
 
     try {
+      // Rafraîchir une dernière fois les réponses depuis le backend avant soumission
+      print('🎯 Rafraîchissement final des scores depuis le backend...');
+      await _refreshStudentAnswersFromBackend();
+
+      final totalScore =
+          _studentAnswers.fold(0.0, (sum, answer) => sum + answer.score);
+      print('🎯 Score total avant soumission: $totalScore');
+      print('🎯 Temps passé: ${timeSpentInSeconds} secondes');
+
       final submittedAttempt = await _repository.submitQuizAttempt(
         _currentAttempt!.id,
         _studentAnswers,
       );
 
       _currentAttempt = submittedAttempt;
+      print(
+          '🎯 Quiz soumis avec succès - Score final du backend: ${submittedAttempt.score}');
+
       await _loadAttempts(_currentQuiz!.id);
       notifyListeners();
     } catch (e) {
@@ -466,6 +530,7 @@ class QuizProvider with ChangeNotifier {
 
   // Réinitialiser l'état
   void reset() {
+    _timer?.cancel();
     _currentQuiz = null;
     _currentAttempt = null;
     _studentAnswers = [];
@@ -474,6 +539,12 @@ class QuizProvider with ChangeNotifier {
     _startTime = null;
     _clearError();
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 
   // Méthodes utilitaires
@@ -524,5 +595,16 @@ class QuizProvider with ChangeNotifier {
   String? getTextAnswer(String questionId) {
     final studentAnswer = getStudentAnswer(questionId);
     return studentAnswer?.textAnswer;
+  }
+
+  // Obtenir le score total actuel
+  double get currentTotalScore {
+    return _studentAnswers.fold(0.0, (sum, answer) => sum + answer.score);
+  }
+
+  // Vérifier si le quiz peut être démarré (pas de tentatives dépassées)
+  bool get canStartQuiz {
+    if (_currentQuiz == null) return false;
+    return _attempts.length < _currentQuiz!.maxAttempts;
   }
 }
