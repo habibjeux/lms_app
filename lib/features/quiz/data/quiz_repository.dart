@@ -139,6 +139,79 @@ class QuizRepository {
     }
   }
 
+  // Sauvegarder une réponse simple (SCQ, TRUE_FALSE, SHORT_ANSWER)
+  Future<void> saveAnswer(String attemptId, String questionId,
+      {String? answerId, String? textAnswer}) async {
+    try {
+      await _api.post('/students/quiz-attempts/answers', data: {
+        'quizAttemptId': attemptId,
+        'questionId': questionId,
+        if (answerId != null) 'answerId': answerId,
+        if (textAnswer != null) 'textAnswer': textAnswer,
+      });
+    } catch (e) {
+      // Extraire le message d'erreur spécifique du serveur si disponible
+      String errorMessage = 'Erreur lors de la sauvegarde de la réponse';
+
+      if (e is DioException && e.response?.data != null) {
+        final responseData = e.response!.data;
+        if (responseData is Map<String, dynamic>) {
+          errorMessage = responseData['error'] ??
+              responseData['message'] ??
+              responseData['detail'] ??
+              'Erreur lors de la sauvegarde de la réponse';
+        } else if (responseData is String) {
+          errorMessage = responseData;
+        }
+      } else if (e is Exception) {
+        final exceptionMessage = e.toString();
+        if (exceptionMessage.startsWith('Exception: ')) {
+          errorMessage = exceptionMessage.substring(11);
+        } else {
+          errorMessage = exceptionMessage;
+        }
+      }
+
+      throw AppException(message: errorMessage);
+    }
+  }
+
+  // Sauvegarder des réponses multiples (MCQ)
+  Future<void> saveMultipleAnswer(
+      String attemptId, String questionId, List<String> answerIds) async {
+    try {
+      await _api.post('/students/quiz-attempts/answers', data: {
+        'quizAttemptId': attemptId,
+        'questionId': questionId,
+        'answerIds': answerIds,
+      });
+    } catch (e) {
+      // Extraire le message d'erreur spécifique du serveur si disponible
+      String errorMessage = 'Erreur lors de la sauvegarde des réponses';
+
+      if (e is DioException && e.response?.data != null) {
+        final responseData = e.response!.data;
+        if (responseData is Map<String, dynamic>) {
+          errorMessage = responseData['error'] ??
+              responseData['message'] ??
+              responseData['detail'] ??
+              'Erreur lors de la sauvegarde des réponses';
+        } else if (responseData is String) {
+          errorMessage = responseData;
+        }
+      } else if (e is Exception) {
+        final exceptionMessage = e.toString();
+        if (exceptionMessage.startsWith('Exception: ')) {
+          errorMessage = exceptionMessage.substring(11);
+        } else {
+          errorMessage = exceptionMessage;
+        }
+      }
+
+      throw AppException(message: errorMessage);
+    }
+  }
+
   // Sauvegarder une réponse localement
   Future<void> _saveAnswerLocally(StudentAnswer answer) async {
     try {

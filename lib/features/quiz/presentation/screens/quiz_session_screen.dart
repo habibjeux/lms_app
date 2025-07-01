@@ -355,10 +355,6 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
     print('🎯 Question type debug:');
     print('🎯 originalType: ${question.originalType}');
     print('🎯 type: ${question.type}');
-    print('🎯 isMCQ: ${question.isMCQ}');
-    print('🎯 isSCQ: ${question.isSCQ}');
-    print('🎯 isMatching: ${question.isMatching}');
-    print('🎯 isTrueFalse: ${question.isTrueFalse}');
     print('🎯 allowsMultipleAnswers: ${question.allowsMultipleAnswers}');
 
     // Questions nécessitant une saisie de texte
@@ -368,25 +364,25 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
     }
 
     // Questions d'association (MATCHING)
-    if (question.isMatching) {
+    if (question.originalType == 'MATCHING') {
       print('🎯 → Utilisation _buildMatchingQuestion');
       return _buildMatchingQuestion(question, quizProvider);
     }
 
     // Questions Vrai/Faux
-    if (question.isTrueFalse) {
+    if (question.originalType == 'TRUE_FALSE') {
       print('🎯 → Utilisation _buildTrueFalseQuestion');
       return _buildTrueFalseQuestion(question, quizProvider);
     }
 
-    // Questions à choix multiples (MCQ)
-    if (question.isMCQ) {
-      print('🎯 → Utilisation _buildMultipleChoiceQuestion');
+    // Questions à choix multiples (MCQ) - permet plusieurs sélections
+    if (question.originalType == 'MCQ') {
+      print('🎯 → Utilisation _buildMultipleChoiceQuestion (MCQ)');
       return _buildMultipleChoiceQuestion(question, quizProvider);
     }
 
-    // Questions à choix unique (SCQ) - par défaut
-    print('🎯 → Utilisation _buildSingleChoiceQuestion (défaut)');
+    // Questions à choix unique (SCQ et autres) - une seule sélection
+    print('🎯 → Utilisation _buildSingleChoiceQuestion (SCQ ou défaut)');
     return _buildSingleChoiceQuestion(question, quizProvider);
   }
 
@@ -396,14 +392,37 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Choisissez une seule réponse :',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w500,
-                color: Colors.grey[700],
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.orange.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Colors.orange.withOpacity(0.3),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.radio_button_on,
+                color: Colors.orange,
+                size: 20,
               ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Choisissez une seule réponse correcte :',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.orange[800],
+                      ),
+                ),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         ...question.answers.map((answer) {
           final isSelected =
               quizProvider.isAnswerSelected(question.id, answer.id);
@@ -473,7 +492,9 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
                         style: TextStyle(
                           fontWeight:
                               isSelected ? FontWeight.w600 : FontWeight.normal,
-                          color: isSelected ? Colors.orange : Colors.grey[800],
+                          color: isSelected
+                              ? Colors.orange[800]
+                              : Colors.grey[800],
                           fontSize: 15,
                         ),
                       ),
@@ -484,6 +505,38 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
             ),
           );
         }),
+        const SizedBox(height: 12),
+        // Indicateur de sélection unique
+        if (quizProvider
+                .getStudentAnswer(question.id)
+                ?.selectedAnswerIds
+                .isNotEmpty ==
+            true)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.green.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.check_circle_outline,
+                  size: 16,
+                  color: Colors.green[600],
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Réponse sélectionnée',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.green[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }
@@ -494,14 +547,37 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Choisissez une ou plusieurs réponses :',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w500,
-                color: Colors.grey[700],
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Colors.blue.withOpacity(0.3),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.check_box_outlined,
+                color: Colors.blue,
+                size: 20,
               ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Choisissez une ou plusieurs réponses correctes :',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.blue[800],
+                      ),
+                ),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         ...question.answers.map((answer) {
           final isSelected =
               quizProvider.isAnswerSelected(question.id, answer.id);
@@ -514,8 +590,8 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
-                        Colors.orange.withOpacity(0.15),
-                        Colors.orange.withOpacity(0.1),
+                        Colors.blue.withOpacity(0.15),
+                        Colors.blue.withOpacity(0.1),
                       ],
                     )
                   : LinearGradient(
@@ -528,13 +604,13 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
                     ),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isSelected ? Colors.orange : Colors.grey[300]!,
+                color: isSelected ? Colors.blue : Colors.grey[300]!,
                 width: isSelected ? 2 : 1,
               ),
               boxShadow: [
                 BoxShadow(
                   color: isSelected
-                      ? Colors.orange.withOpacity(0.2)
+                      ? Colors.blue.withOpacity(0.2)
                       : Colors.black.withOpacity(0.05),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
@@ -553,7 +629,7 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
                       padding: const EdgeInsets.all(2),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? Colors.orange.withOpacity(0.1)
+                            ? Colors.blue.withOpacity(0.1)
                             : Colors.transparent,
                         borderRadius: BorderRadius.circular(4),
                       ),
@@ -561,7 +637,7 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
                         isSelected
                             ? Icons.check_box
                             : Icons.check_box_outline_blank,
-                        color: isSelected ? Colors.orange : Colors.grey[600],
+                        color: isSelected ? Colors.blue : Colors.grey[600],
                         size: 24,
                       ),
                     ),
@@ -572,7 +648,8 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
                         style: TextStyle(
                           fontWeight:
                               isSelected ? FontWeight.w600 : FontWeight.normal,
-                          color: isSelected ? Colors.orange : Colors.grey[800],
+                          color:
+                              isSelected ? Colors.blue[800] : Colors.grey[800],
                           fontSize: 15,
                         ),
                       ),
@@ -583,6 +660,33 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
             ),
           );
         }),
+        const SizedBox(height: 12),
+        // Indicateur du nombre de réponses sélectionnées
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.grey.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.info_outline,
+                size: 16,
+                color: Colors.grey[600],
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '${quizProvider.getStudentAnswer(question.id)?.selectedAnswerIds.length ?? 0} réponse(s) sélectionnée(s)',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -592,14 +696,37 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Choisissez Vrai ou Faux :',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w500,
-                color: Colors.grey[700],
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.purple.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Colors.purple.withOpacity(0.3),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.quiz,
+                color: Colors.purple,
+                size: 20,
               ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Choisissez Vrai ou Faux :',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.purple[800],
+                      ),
+                ),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         Row(
           children: question.answers.map((answer) {
             final isSelected =
@@ -609,7 +736,7 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
 
             return Expanded(
               child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 4),
+                margin: const EdgeInsets.symmetric(horizontal: 6),
                 decoration: BoxDecoration(
                   gradient: isSelected
                       ? LinearGradient(
@@ -653,11 +780,12 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
                       _selectSingleAnswer(question, answer, quizProvider),
                   borderRadius: BorderRadius.circular(12),
                   child: Container(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 16, horizontal: 12),
                     child: Column(
                       children: [
                         Icon(
-                          isTrue ? Icons.check : Icons.close,
+                          isTrue ? Icons.check_circle : Icons.cancel,
                           color: isSelected
                               ? (isTrue ? Colors.green : Colors.red)
                               : Colors.grey[600],
@@ -670,8 +798,9 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
                             fontWeight:
                                 isSelected ? FontWeight.bold : FontWeight.w500,
                             color: isSelected
-                                ? (isTrue ? Colors.green : Colors.red)
-                                : Colors.grey[700],
+                                ? (isTrue ? Colors.green[800] : Colors.red[800])
+                                : Colors.grey[800],
+                            fontSize: 16,
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -683,6 +812,38 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
             );
           }).toList(),
         ),
+        const SizedBox(height: 12),
+        // Indicateur de sélection
+        if (quizProvider
+                .getStudentAnswer(question.id)
+                ?.selectedAnswerIds
+                .isNotEmpty ==
+            true)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.purple.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.check_circle_outline,
+                  size: 16,
+                  color: Colors.purple[600],
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Réponse sélectionnée',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.purple[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }
@@ -997,6 +1158,7 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
               onChanged: (value) {
                 quizProvider.saveAnswer(
                   question.id,
+                  '', // Pas d'answerId pour les questions texte
                   textAnswer: value,
                 );
               },
@@ -1069,12 +1231,14 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
       Question question, Answer answer, QuizProvider quizProvider) async {
     print('🎯 _selectSingleAnswer appelé');
     print('🎯 Question ID: ${question.id}');
+    print('🎯 Question Type: ${question.originalType}');
     print('🎯 Answer ID: ${answer.id}');
     print('🎯 Answer text: ${answer.text}');
 
+    // Pour les questions à choix unique, utiliser la nouvelle méthode simplifiée
     await quizProvider.saveAnswer(
       question.id,
-      selectedAnswerIds: [answer.id],
+      answer.id,
     );
   }
 
@@ -1082,6 +1246,7 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
       Question question, Answer answer, QuizProvider quizProvider) async {
     print('🎯 _toggleMultipleAnswer appelé');
     print('🎯 Question ID: ${question.id}');
+    print('🎯 Question Type: ${question.originalType}');
     print('🎯 Answer ID: ${answer.id}');
     print('🎯 Answer text: ${answer.text}');
 
@@ -1101,9 +1266,10 @@ class _QuizSessionScreenState extends State<QuizSessionScreen> {
 
     print('🎯 Nouvelles réponses: $selectedAnswers');
 
-    await quizProvider.saveAnswer(
+    // Utiliser la nouvelle méthode simplifiée pour les MCQ
+    await quizProvider.saveMultipleChoiceAnswer(
       question.id,
-      selectedAnswerIds: selectedAnswers,
+      selectedAnswers,
     );
   }
 

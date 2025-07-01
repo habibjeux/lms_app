@@ -176,9 +176,11 @@ class Question extends BaseModel {
 
   bool get allowsMultipleAnswers {
     // Basé sur le type original de l'API
-    return originalType == 'MCQ' ||
+    final result = originalType == 'MCQ' ||
         originalType == 'MULTIPLE_CHOICE' ||
         originalType == 'MATCHING';
+    print('🔍 allowsMultipleAnswers pour ${originalType}: $result');
+    return result;
   }
 
   bool get requiresTextInput {

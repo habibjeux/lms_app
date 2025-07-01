@@ -268,106 +268,43 @@ class QuizProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Sauvegarder une réponse
-  Future<void> saveAnswer(
-    String questionId, {
-    List<String>? selectedAnswerIds,
-    String? textAnswer,
-  }) async {
-    print('🔄 saveAnswer appelé pour question: $questionId');
-    print('🔄 selectedAnswerIds: $selectedAnswerIds');
-    print('🔄 textAnswer: $textAnswer');
-
-    // FORCER l'initialisation si vide
-    if (_studentAnswers.isEmpty) {
-      print('🚨 FORÇAGE de l\'initialisation des StudentAnswers');
-      if (_currentQuiz != null && _currentAttempt != null) {
-        _forceInitializeStudentAnswers();
-      } else {
-        print(
-            '❌ Quiz ou attempt null: quiz=${_currentQuiz != null}, attempt=${_currentAttempt != null}');
-        return;
-      }
-    }
-
-    final answerIndex = _studentAnswers.indexWhere(
-      (answer) => answer.questionId == questionId,
-    );
-
-    print('🔄 answerIndex trouvé: $answerIndex');
-    print('🔄 Total studentAnswers: ${_studentAnswers.length}');
-
-    if (answerIndex == -1) {
-      print('❌ Aucune réponse trouvée pour cette question');
-      print('❌ Questions disponibles:');
-      for (int i = 0; i < _studentAnswers.length; i++) {
-        print('❌   [$i] ${_studentAnswers[i].questionId}');
-      }
-      print('❌ Question recherchée: $questionId');
-
-      // DERNIÈRE TENTATIVE - créer la StudentAnswer à la volée
-      print('🚨 CRÉATION À LA VOLÉE de la StudentAnswer');
-      final newStudentAnswer = StudentAnswer(
-        id: '${_currentAttempt!.id}_${questionId}_${DateTime.now().millisecondsSinceEpoch}',
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        active: true,
-        questionId: questionId,
-        quizAttemptId: _currentAttempt!.id,
-        answerId: null,
-        selectedAnswerIds: selectedAnswerIds ?? [],
+  // Sauvegarder une réponse simple (SCQ, TRUE_FALSE, SHORT_ANSWER)
+  Future<void> saveAnswer(String questionId, String answerId,
+      {String? textAnswer}) async {
+    try {
+      await _repository.saveAnswer(
+        _currentAttempt!.id,
+        questionId,
+        answerId: answerId,
         textAnswer: textAnswer,
-        score: 0.0, // Le backend calculera le score
-        isCorrect: false,
       );
-      _studentAnswers.add(newStudentAnswer);
-      print('✅ StudentAnswer créée à la volée: ${newStudentAnswer.id}');
 
-      // Sauvegarder au backend - le backend calculera le score automatiquement
-      if (_currentAttempt != null && !_currentAttempt!.id.startsWith('demo_')) {
-        try {
-          await _repository.saveStudentAnswer(newStudentAnswer);
-          print(
-              '✅ Réponse sauvegardée en base - le backend calculera le score');
-
-          // Recharger les réponses pour récupérer le score calculé par le backend
-          await _refreshStudentAnswersFromBackend();
-        } catch (e) {
-          print('❌ Erreur lors de la sauvegarde: $e');
-        }
-      }
-
+      // Recharger les données du quiz pour avoir le score à jour
+      await _refreshStudentAnswersFromBackend();
       notifyListeners();
-      return;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
     }
+  }
 
-    // Mettre à jour la réponse locale
-    final updatedAnswer = _studentAnswers[answerIndex].copyWith(
-      selectedAnswerIds: selectedAnswerIds ?? [],
-      textAnswer: textAnswer,
-      score: 0.0, // Le backend calculera le score
-      isCorrect: false, // Le backend déterminera si c'est correct
-    );
+  // Sauvegarder des réponses multiples (MCQ)
+  Future<void> saveMultipleChoiceAnswer(
+      String questionId, List<String> answerIds) async {
+    try {
+      await _repository.saveMultipleAnswer(
+        _currentAttempt!.id,
+        questionId,
+        answerIds,
+      );
 
-    _studentAnswers[answerIndex] = updatedAnswer;
-    print(
-        '✅ Réponse mise à jour localement: ${updatedAnswer.selectedAnswerIds}');
-
-    // Sauvegarder au backend seulement si pas en mode demo
-    if (_currentAttempt != null && !_currentAttempt!.id.startsWith('demo_')) {
-      try {
-        await _repository.saveStudentAnswer(updatedAnswer);
-        print('✅ Réponse sauvegardée en base - le backend calculera le score');
-
-        // Recharger les réponses pour récupérer le score calculé par le backend
-        await _refreshStudentAnswersFromBackend();
-      } catch (e) {
-        print('❌ Erreur lors de la sauvegarde automatique: $e');
-        // Ne pas bloquer l'interface en cas d'erreur de sauvegarde
-      }
+      // Recharger les données du quiz pour avoir le score à jour
+      await _refreshStudentAnswersFromBackend();
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
     }
-
-    notifyListeners();
   }
 
   // Recharger les réponses depuis le backend pour récupérer les scores calculés
@@ -380,15 +317,27 @@ class QuizProvider with ChangeNotifier {
           await _repository.getQuizAttempt(_currentAttempt!.id);
       if (updatedAttempt != null && updatedAttempt.studentAnswers.isNotEmpty) {
         // Mettre à jour nos réponses locales avec les données du backend
+        // SEULEMENT pour les questions SCQ et TRUE_FALSE (pas MCQ)
         for (final backendAnswer in updatedAttempt.studentAnswers) {
           final localIndex = _studentAnswers.indexWhere(
             (answer) => answer.questionId == backendAnswer.questionId,
           );
 
           if (localIndex != -1) {
-            _studentAnswers[localIndex] = backendAnswer;
-            print(
-                '🔄 Score mis à jour depuis le backend - Question ${backendAnswer.questionId}: ${backendAnswer.score}');
+            // Vérifier le type de question
+            final question = _currentQuiz!.questions.firstWhere(
+              (q) => q.id == backendAnswer.questionId,
+            );
+
+            // Seulement mettre à jour depuis le backend pour les non-MCQ
+            if (question.originalType != 'MCQ') {
+              _studentAnswers[localIndex] = backendAnswer;
+              print(
+                  '🔄 Score mis à jour depuis le backend - Question ${backendAnswer.questionId}: ${backendAnswer.score}');
+            } else {
+              print(
+                  '🔄 Ignorer mise à jour backend pour MCQ - Question ${backendAnswer.questionId}');
+            }
           }
         }
         notifyListeners();
@@ -586,8 +535,15 @@ class QuizProvider with ChangeNotifier {
   // Vérifier si une réponse est sélectionnée
   bool isAnswerSelected(String questionId, String answerId) {
     final studentAnswer = getStudentAnswer(questionId);
-    final isSelected =
-        studentAnswer?.selectedAnswerIds.contains(answerId) ?? false;
+    if (studentAnswer == null) {
+      print(
+          '🔍 isAnswerSelected: Aucune studentAnswer trouvée pour question $questionId');
+      return false;
+    }
+
+    final isSelected = studentAnswer.selectedAnswerIds.contains(answerId);
+    print(
+        '🔍 isAnswerSelected: Question $questionId, Answer $answerId -> $isSelected (${studentAnswer.selectedAnswerIds})');
     return isSelected;
   }
 
