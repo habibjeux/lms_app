@@ -30,6 +30,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  json_annotation: ^4.9.0
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -40,6 +41,7 @@ dependencies:
   hive: ^2.2.3
   json_serializable: ^6.9.3
   flutter_widget_from_html: ^0.15.3
+  flutter_widget_from_html_core: ^0.15.0
   youtube_player_flutter: ^9.1.1
   wakelock_plus: ^1.2.10
   jitsi_meet_flutter_sdk: ^10.3.0

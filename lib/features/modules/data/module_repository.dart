@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../models/module.dart';
+import '../models/module_summary.dart';
 
 class ModuleRepository {
   final Dio _dio;
@@ -53,6 +54,15 @@ class ModuleRepository {
       }
     } catch (e) {
       throw Exception('Erreur lors de la création du module: $e');
+    }
+  }
+
+  Future<ModuleSummary> getModuleSummary(String moduleId) async {
+    try {
+      final response = await _dio.get('/modules/$moduleId/summary');
+      return ModuleSummary.fromJson(response.data);
+    } catch (e) {
+      throw Exception('Erreur lors de la récupération du résumé du module: $e');
     }
   }
 }

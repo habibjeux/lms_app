@@ -241,25 +241,6 @@ class _QuizDetailScreenState extends State<QuizDetailScreen> {
                         height: 1.2,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        '${_formatScore(quiz.maxScore)} points',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -300,7 +281,7 @@ class _QuizDetailScreenState extends State<QuizDetailScreen> {
                         Icon(
                           Icons.event_busy,
                           color:
-                              quiz.isExpired ? Colors.red[200] : Colors.white,
+                              quiz.isExpired ? Colors.red[800] : Colors.white,
                           size: 18,
                         ),
                         const SizedBox(width: 8),
@@ -308,7 +289,7 @@ class _QuizDetailScreenState extends State<QuizDetailScreen> {
                           'Disponible jusqu\'au: ${_formatDate(quiz.endDate!)}',
                           style: TextStyle(
                             color:
-                                quiz.isExpired ? Colors.red[200] : Colors.white,
+                                quiz.isExpired ? Colors.red[800] : Colors.white,
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
                           ),
@@ -320,21 +301,18 @@ class _QuizDetailScreenState extends State<QuizDetailScreen> {
               ),
             ),
           ],
-          if (!quiz.isAvailable) ...[
+          if (!quiz.isAvailable && !quiz.isExpired) ...[
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: quiz.isExpired
-                    ? Colors.red.withOpacity(0.2)
-                    : Colors.blue.withOpacity(0.2),
+                color: Colors.blue.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                quiz.isExpired ? 'Quiz expiré' : 'Quiz non disponible',
+                'Quiz non disponible',
                 style: TextStyle(
-                  color:
-                      quiz.isExpired ? Colors.red[200] : Colors.lightBlue[200],
+                  color: Colors.lightBlue[200],
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -676,9 +654,7 @@ class _QuizDetailScreenState extends State<QuizDetailScreen> {
                   label: Text(
                     quiz.isAvailable
                         ? 'Commencer le quiz'
-                        : quiz.isExpired
-                            ? 'Quiz expiré'
-                            : 'Quiz non disponible',
+                        : 'Quiz non disponible',
                     style: const TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 16,

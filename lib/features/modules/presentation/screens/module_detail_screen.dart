@@ -7,6 +7,10 @@ import '../widgets/chapter_widget.dart';
 import '../widgets/module_activity.dart';
 import '../../../../core/services/sync_service.dart';
 import '../../../../core/widgets/expandable_text.dart';
+import '../widgets/module_summary_widget.dart';
+import '../../providers/module_provider.dart';
+import '../widgets/module_summary_drawer.dart';
+import '../../models/module_summary.dart';
 
 class ModuleDetailScreen extends StatefulWidget {
   final Module module;
@@ -30,11 +34,15 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
       final provider = Provider.of<ModulesProvider>(context, listen: false);
       provider.setCurrentModule(widget.module);
     });
+    final moduleProvider = Provider.of<ModuleProvider>(context, listen: false);
+    moduleProvider.fetchModuleSummary(widget.module.id);
   }
 
   @override
   void dispose() {
     _scrollController.dispose();
+    final moduleProvider = Provider.of<ModuleProvider>(context, listen: false);
+    moduleProvider.clearModuleSummary();
     super.dispose();
   }
 
@@ -180,6 +188,21 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
         elevation: 0,
         toolbarHeight: 40,
         actions: [
+          Consumer<ModuleProvider>(
+            builder: (context, provider, child) {
+              if (!provider.isLoadingSummary &&
+                  provider.moduleSummary != null &&
+                  provider.moduleSummary!.chapters.isNotEmpty) {
+                return IconButton(
+                  icon: const Icon(Icons.menu_book),
+                  tooltip: 'Voir le résumé du module',
+                  onPressed: () =>
+                      _showSummaryDrawer(context, provider.moduleSummary!),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
           // Bouton Télécharger tout le module
           IconButton(
             onPressed: _isDownloading ? null : _downloadFullModule,
@@ -329,8 +352,6 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
                     ),
                   ),
                 ],
-
-                const SliverToBoxAdapter(child: SizedBox(height: 20)),
               ],
             ),
           );
@@ -467,5 +488,14 @@ class _ModuleDetailScreenState extends State<ModuleDetailScreen> {
         );
       }
     }
+  }
+
+  void _showSummaryDrawer(BuildContext context, ModuleSummary summary) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) =>
+            ModuleSummaryDrawer(summary: summary),
+      ),
+    );
   }
 }

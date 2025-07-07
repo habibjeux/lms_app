@@ -6,6 +6,7 @@ import '../../../core/services/storage_service.dart';
 import '../../../core/services/download_storage_service.dart';
 import '../../../core/exceptions/app_exception.dart';
 import '../models/module.dart';
+import '../models/module_summary.dart';
 
 class ModulesRepository {
   final Dio _dio = ApiClient.instance;
@@ -203,6 +204,15 @@ class ModulesRepository {
       return result.isNotEmpty && result[0].rawAddress.isNotEmpty;
     } on SocketException catch (_) {
       return false;
+    }
+  }
+
+  Future<ModuleSummary> getModuleSummary(String moduleId) async {
+    try {
+      final response = await _dio.get('/modules/$moduleId/summary');
+      return ModuleSummary.fromJson(response.data);
+    } catch (e) {
+      throw Exception('Erreur lors de la récupération du résumé du module: $e');
     }
   }
 }

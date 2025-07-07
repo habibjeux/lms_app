@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../data/modules_repository.dart';
 import '../models/module.dart';
+import '../models/module_summary.dart';
 
 class ModuleProvider with ChangeNotifier {
   final ModulesRepository _repository;
@@ -12,6 +13,10 @@ class ModuleProvider with ChangeNotifier {
   String? _searchQuery;
   static const int _itemsPerPage = 5;
 
+  ModuleSummary? _moduleSummary;
+  bool _isLoadingSummary = false;
+  String? _summaryError;
+
   ModuleProvider(this._repository);
 
   List<Module> get modules => _modules;
@@ -19,6 +24,10 @@ class ModuleProvider with ChangeNotifier {
   String? get error => _error;
   bool get hasMorePages => _currentPage < _totalPages;
   String? get searchQuery => _searchQuery;
+
+  ModuleSummary? get moduleSummary => _moduleSummary;
+  bool get isLoadingSummary => _isLoadingSummary;
+  String? get summaryError => _summaryError;
 
   Future<void> loadModules({bool refresh = false}) async {
     if (refresh) {
@@ -70,6 +79,28 @@ class ModuleProvider with ChangeNotifier {
       _setError('Erreur lors du chargement des détails du module');
       rethrow;
     }
+  }
+
+  Future<void> fetchModuleSummary(String moduleId) async {
+    try {
+      _isLoadingSummary = true;
+      _summaryError = null;
+      notifyListeners();
+
+      _moduleSummary = await _repository.getModuleSummary(moduleId);
+    } catch (e) {
+      _summaryError = e.toString();
+    } finally {
+      _isLoadingSummary = false;
+      notifyListeners();
+    }
+  }
+
+  void clearModuleSummary() {
+    _moduleSummary = null;
+    _summaryError = null;
+    _isLoadingSummary = false;
+    notifyListeners();
   }
 
   void _setLoading(bool loading) {

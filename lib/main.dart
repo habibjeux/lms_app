@@ -29,6 +29,8 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'features/modules/providers/activity_provider.dart';
 import 'features/modules/providers/assignment_provider.dart';
 import 'features/quiz/providers/quiz_provider.dart';
+import 'features/modules/providers/module_provider.dart';
+import 'features/modules/data/modules_repository.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,6 +68,9 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => DashboardProvider()),
         ChangeNotifierProvider(create: (_) => ExpandableTextFieldProvider()),
         Provider(create: (_) => DownloadStorageService()),
+        ChangeNotifierProvider(
+          create: (context) => ModuleProvider(ModulesRepository()),
+        ),
       ],
       child: MaterialApp(
           builder: (context, child) => ConnectivityOverlay(child: child!),
